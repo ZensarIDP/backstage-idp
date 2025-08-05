@@ -95,8 +95,8 @@ catalog:
         - allow: [User, Group]
 
     ## Uncomment these lines to add more example data
-    # - type: url
-    #   target: https://github.com/backstage/backstage/blob/master/packages/catalog-model/examples/all.yaml
+    - type: url
+      target: https://github.com/backstage/backstage/blob/master/packages/catalog-model/examples/all.yaml
 
     ## Uncomment these lines to add an example org
     # - type: url
@@ -110,8 +110,9 @@ catalog:
     #   target: https://github.com/your-github-org
 
     # GitHub specific repository discovery - discovers specific repositories
-    # - type: url
-    #   target: https://github.com/your-github-org/your-repo/blob/main/catalog-info.yaml
+    # Add your repository URLs here
+    - type: url
+      target: https://github.com/Abhi232003/backstage-idp/blob/main/catalog-info.yaml
 
 kubernetes:
   # see https://backstage.io/docs/features/kubernetes/configuration for kubernetes configuration options
