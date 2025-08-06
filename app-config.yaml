@@ -37,7 +37,7 @@ integrations:
     - host: github.com
       # This is a Personal Access Token or PAT from GitHub. You can find out how to generate this token, and more information
       # about setting up the GitHub integration here: https://backstage.io/docs/integrations/github/locations#configuration
-      token: ${GITHUB_TOKEN}
+      token: TOKEN HERE
     ### Example for how to add your GitHub Enterprise instance using the API:
     # - host: ghe.example.net
     #   apiBaseUrl: https://ghe.example.net/api/v3
@@ -70,6 +70,13 @@ auth:
 
 scaffolder:
   # see https://backstage.io/docs/features/software-templates/configuration for software template options
+  github:
+    visibility: public # or 'private', 'internal'
+    allowedOwners: ['Abhi232003'] # Replace with your GitHub username/org
+  defaultAuthor:
+    name: Backstage Scaffolder
+    email: scaffolder@backstage.io
+  defaultCommitMessage: 'Initial commit'
 
 catalog:
   import:
@@ -88,6 +95,12 @@ catalog:
       rules:
         - allow: [Template]
 
+    # Node.js starter template
+    - type: file
+      target: ../../templates/nodejs-template/template.yaml
+      rules:
+        - allow: [Template]
+
     # Local example organizational data
     - type: file
       target: ../../examples/org.yaml
@@ -95,8 +108,8 @@ catalog:
         - allow: [User, Group]
 
     ## Uncomment these lines to add more example data
-    - type: url
-      target: https://github.com/backstage/backstage/blob/master/packages/catalog-model/examples/all.yaml
+    # - type: url
+    #   target: https://github.com/backstage/backstage/blob/master/packages/catalog-model/examples/all.yaml
 
     ## Uncomment these lines to add an example org
     # - type: url
@@ -107,7 +120,8 @@ catalog:
     # GitHub organization discovery - discovers all repositories in your GitHub org
     # Replace 'your-github-org' with your actual GitHub organization name
     # - type: github-discovery
-    #   target: https://github.com/your-github-org
+    #   target: https://github.com/Abhi232003
+    
 
     # GitHub specific repository discovery - discovers specific repositories
     # Add your repository URLs here
