@@ -6,12 +6,13 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  SERVICE_NAME: ${{ values.component_id }}
+  GCP_REGION: us-central1
+
 jobs:
   test:
     runs-on: ubuntu-latest
-
-    env:
-      SERVICE_NAME: my-service-name
 
     steps:
       - name: Checkout code
@@ -30,22 +31,24 @@ jobs:
 
       - name: Check build tag
         run: |
-          echo "SERVICE_NAME=${{ env.SERVICE_NAME }}"
-          echo "github.sha=${{ github.sha }}"
-          if [ -z "${{ env.SERVICE_NAME }}" ] || [ -z "${{ github.sha }}" ]; then
+          echo "SERVICE_NAME=${{ '${{' }} env.SERVICE_NAME }}"
+          echo "GITHUB_SHA=${{ '${{' }} github.sha }}"
+          if [ -z "${{ '${{' }} env.SERVICE_NAME }}" ] || [ -z "${{ '${{' }} github.sha }}" ]; then
             echo "❌ Missing required tag inputs"
             exit 1
           fi
 
       - name: Build Docker image
         run: |
-          echo "Building image: ${{ env.SERVICE_NAME }}:${{ github.sha }}"
-          docker build -t ${{ env.SERVICE_NAME }}:${{ github.sha }} .
+          TAG=${{ '${{' }} github.sha }}
+          echo "Building image: ${{ '${{' }} env.SERVICE_NAME }}:$TAG"
+          docker build -t ${{ '${{' }} env.SERVICE_NAME }}:$TAG .
 
       - name: Test Docker container
         run: |
+          TAG=${{ '${{' }} github.sha }}
           PORT=$(( ( RANDOM % 1000 )  + 8000 ))
-          docker run -d -p $PORT:3001 --name test-container ${{ env.SERVICE_NAME }}:${{ github.sha }}
+          docker run -d -p $PORT:3001 --name test-container ${{ '${{' }} env.SERVICE_NAME }}:$TAG
           sleep 10
           curl -f http://localhost:$PORT || (docker logs test-container && exit 1)
           docker stop test-container
@@ -56,18 +59,13 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
-    env:
-      SERVICE_NAME: my-service-name
-      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GCP_REGION: us-central1
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Validate GCP_PROJECT_ID
         run: |
-          if [ -z "${{ env.GCP_PROJECT_ID }}" ]; then
+          if [ -z "${{ '${{' }} secrets.GCP_PROJECT_ID }}" ]; then
             echo "❌ GCP_PROJECT_ID is not set. Please add it to GitHub Secrets."
             exit 1
           fi
@@ -75,39 +73,51 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v1
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ '${{' }} secrets.GCP_SA_KEY }}
 
       - name: Setup Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v1
 
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+        run: gcloud auth configure-docker ${{ '${{' }} env.GCP_REGION }}-docker.pkg.dev
 
       - name: Ensure Docker repository exists
         run: |
-          if ! gcloud artifacts repositories describe ${{ env.SERVICE_NAME }} \
-            --location=${{ env.GCP_REGION }} >/dev/null 2>&1; then
-            gcloud artifacts repositories create ${{ env.SERVICE_NAME }} \
-              --repository-format=docker \
-              --location=${{ env.GCP_REGION }} \
-              --description="Container repository for ${{ env.SERVICE_NAME }}"
-          fi
+          REPO=${{ '${{' }} env.SERVICE_NAME }}
+          gcloud artifacts repositories describe $REPO \
+            --location=${{ '${{' }} env.GCP_REGION }} >/dev/null 2>&1 || \
+          gcloud artifacts repositories create $REPO \
+            --repository-format=docker \
+            --location=${{ '${{' }} env.GCP_REGION }} \
+            --description="Container repo for $REPO"
 
       - name: Build and push Docker image
         run: |
-          IMAGE=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME }}/${{ env.SERVICE_NAME }}
-          echo "Building image: $IMAGE:${{ github.sha }}"
-          docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
-          docker push $IMAGE:${{ github.sha }}
-          docker push $IMAGE:latest
+          PROJECT_ID=$(echo "${{ '${{' }} secrets.GCP_PROJECT_ID }}" | tr -d '\n\r')
+          REGION="${{ '${{' }} env.GCP_REGION }}"
+          SERVICE="${{ '${{' }} env.SERVICE_NAME }}"
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE}/${SERVICE}"
+          echo "Building image: ${IMAGE}:${{ '${{' }} github.sha }}"
+          docker build -t "${IMAGE}:${{ '${{' }} github.sha }}" -t "${IMAGE}:latest" .
+          docker push "${IMAGE}:${{ '${{' }} github.sha }}"
+          docker push "${IMAGE}:latest"
 
       - name: Deploy to Cloud Run
         run: |
-          IMAGE=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME }}/${{ env.SERVICE_NAME }}:latest
-          gcloud run deploy ${{ env.SERVICE_NAME }} \
-            --image $IMAGE \
+          PROJECT_ID=$(echo "${{ secrets.GCP_PROJECT_ID }}" | tr -d '\n\r')
+          REGION="${{ env.GCP_REGION }}"
+          SERVICE="${{ env.SERVICE_NAME }}"
+      - name: Deploy to Cloud Run
+        run: |
+          PROJECT_ID=$(echo "${{ '${{' }} secrets.GCP_PROJECT_ID }}" | tr -d '\n\r')
+          REGION="${{ '${{' }} env.GCP_REGION }}"
+          SERVICE="${{ '${{' }} env.SERVICE_NAME }}"
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE}/${SERVICE}:latest"
+          echo "Deploying image: ${IMAGE}"
+          gcloud run deploy "${SERVICE}" \
+            --image "${IMAGE}" \
             --platform managed \
-            --region ${{ env.GCP_REGION }} \
+            --region "${REGION}" \
             --allow-unauthenticated \
             --port 3001 \
             --memory 512Mi \
@@ -117,10 +127,8 @@ jobs:
 
       - name: Get Cloud Run URL
         run: |
-          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
-            --region=${{ env.GCP_REGION }} \
+          URL=$(gcloud run services describe ${{ '${{' }} env.SERVICE_NAME }} \
+            --region=${{ '${{' }} env.GCP_REGION }} \
             --format='value(status.url)')
           echo "🌐 Service deployed at: $URL"
-          echo "SERVICE_URL<<EOF" >> $GITHUB_ENV
-          echo "$URL" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          echo "SERVICE_URL=$URL" >> $GITHUB_ENV
