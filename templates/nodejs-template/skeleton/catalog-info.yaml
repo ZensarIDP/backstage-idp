@@ -5,6 +5,7 @@ metadata:
   description: ${{ values.description }}
   annotations:
     github.com/project-slug: ${{ values.destination.owner }}/${{ values.destination.repo }}
+    github.com/workflows: ci.yml
 spec:
   type: service
   lifecycle: experimental
