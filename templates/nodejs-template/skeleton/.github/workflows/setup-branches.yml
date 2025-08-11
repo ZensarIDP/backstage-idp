@@ -1,0 +1,150 @@
+name: Setup Environment Branches
+
+on:
+  push:
+    branches: [ dev ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  repository-projects: write
+
+jobs:
+  setup-branches:
+    runs-on: ubuntu-latest
+    # Only run this setup once when the repo is first created
+    if: github.run_number == 1
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ '${{' }} secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Setup branches
+        run: |
+          echo "🌿 Setting up environment branches..."
+          
+          # Create staging branch from dev (dev is now the default)
+          git checkout -b staging
+          git push origin staging
+          
+          # Create main branch from dev  
+          git checkout -b main
+          git push origin main
+          
+          # Go back to dev (default branch)
+          git checkout dev
+          
+          echo "✅ Environment branches created successfully!"
+          echo "📋 Available branches:"
+          echo "   - dev (development - default)"
+          echo "   - staging (staging)"
+          echo "   - main (production)"
+
+      - name: Setup branch protection
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            
+            // NOTE: We intentionally do NOT protect the 'dev' branch
+            // Dev branch should allow direct commits for fast development iteration
+            
+            // Protect main branch (production)
+            try {
+              await github.rest.repos.updateBranchProtection({
+                owner,
+                repo,
+                branch: 'main',
+                required_status_checks: {
+                  strict: true,
+                  contexts: ['test']
+                },
+                enforce_admins: true,
+                required_pull_request_reviews: {
+                  required_approving_review_count: 1,
+                  dismiss_stale_reviews: true
+                },
+                restrictions: null
+              });
+              console.log('✅ Main branch protection enabled');
+            } catch (error) {
+              console.log('ℹ️ Main branch protection setup failed (may require admin permissions):', error.message);
+            }
+            
+            // Protect staging branch
+            try {
+              await github.rest.repos.updateBranchProtection({
+                owner,
+                repo,
+                branch: 'staging',
+                required_status_checks: {
+                  strict: true,
+                  contexts: ['test']
+                },
+                enforce_admins: false,
+                required_pull_request_reviews: {
+                  required_approving_review_count: 1
+                },
+                restrictions: null
+              });
+              console.log('✅ Staging branch protection enabled');
+            } catch (error) {
+              console.log('ℹ️ Staging branch protection setup failed (may require admin permissions):', error.message);
+            }
+            
+            console.log('ℹ️ Dev branch intentionally left unprotected for direct commits');
+
+      - name: Change default branch to dev
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            
+            try {
+              // Ensure dev is the default branch (should already be set)
+              await github.rest.repos.update({
+                owner,
+                repo,
+                default_branch: 'dev'
+              });
+              console.log('✅ Confirmed dev as default branch');
+            } catch (error) {
+              console.log('ℹ️ Could not update default branch:', error.message);
+            }
+
+      - name: Create initial commit on dev
+        run: |
+          echo "🚀 Creating initial development commit..."
+          git checkout dev
+          
+          # Update README to indicate this is the development branch
+          echo "" >> README.md
+          echo "<!-- Current branch: dev -->" >> README.md
+          echo "🚀 **You are on the development branch** - Push here to deploy to the development environment." >> README.md
+          
+          git add .
+          git commit -m "feat: setup development environment
+
+          - Created dev, staging, and main branches
+          - Configured environment-specific deployments
+          - Ready for development workflow
+          
+          Next steps:
+          1. Push to dev branch for development deployment
+          2. Create PR to staging for staging deployment  
+          3. Create PR to main for production deployment" || echo "No changes to commit"
+          
+          git push origin dev || echo "Push failed or no changes"
+          
+          echo "✅ Initial development setup complete!"
+          echo "🌐 Development branch is ready for use"

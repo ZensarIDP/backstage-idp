@@ -8,3 +8,9 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 *.log
+
+# Service account keys (keep these secure!)
+sa-key-*.json
+
+# Deployment logs
+deployment.log

@@ -10,8 +10,12 @@
     "docker:build": "docker build -t ${{ values.component_id }} .",
     "docker:run": "docker run -p 3001:3001 ${{ values.component_id }}",
     "docker:stop": "docker stop $(docker ps -q --filter ancestor=${{ values.component_id }})",
-    "deploy:staging": "bash ./deploy/cloud-run.sh staging",
-    "deploy:production": "bash ./deploy/cloud-run.sh latest"
+    "deploy:dev": "bash ./deploy/dev.sh",
+    "deploy:staging": "bash ./deploy/staging.sh", 
+    "deploy:production": "bash ./deploy/prod.sh",
+    "env:dev": "cp .env.dev .env",
+    "env:staging": "cp .env.staging .env",
+    "env:prod": "cp .env.prod .env"
   },
   "dependencies": {
     "express": "^4.18.2"

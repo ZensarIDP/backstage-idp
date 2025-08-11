@@ -6,7 +6,14 @@ metadata:
   annotations:
     github.com/project-slug: ${{ values.destination.owner }}/${{ values.destination.repo }}
     github.com/workflows: ci.yml
+    backstage.io/environments: 'dev,staging,prod'
+  tags:
+    - nodejs
+    - microservice
+    - cloud-run
+    - multi-environment
 spec:
   type: service
   lifecycle: experimental
   owner: ${{ values.owner }}
+  system: ${{ values.component_id }}-system

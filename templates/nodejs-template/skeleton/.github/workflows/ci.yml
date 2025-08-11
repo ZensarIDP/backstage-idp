@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, staging, dev ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, staging ]
 
 env:
   SERVICE_NAME: ${{ values.component_id }}
@@ -54,26 +54,40 @@ jobs:
           docker stop test-container
           docker rm test-container
 
-  build-and-deploy:
+  build-and-deploy-dev:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/dev'
+    environment: development
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Validate GCP_PROJECT_ID
+      - name: Validate GCP_PROJECT_ID_DEV
         run: |
-          if [ -z "${{ '${{' }} secrets.GCP_PROJECT_ID }}" ]; then
-            echo "❌ GCP_PROJECT_ID is not set. Please add it to GitHub Secrets."
+          if [ -z "${{ '${{' }} secrets.GCP_PROJECT_ID_DEV }}" ] && [ -z "${{ '${{' }} secrets.GCP_PROJECT_ID }}" ]; then
+            echo "❌ Neither GCP_PROJECT_ID_DEV nor GCP_PROJECT_ID is set."
+            echo "Please add one of them to GitHub Secrets."
+            echo "For multi-environment setup, use GCP_PROJECT_ID_DEV"
+            echo "For single-environment setup, use GCP_PROJECT_ID"
             exit 1
+          fi
+
+      - name: Set Project ID and SA Key
+        run: |
+          if [ -n "${{ '${{' }} secrets.GCP_PROJECT_ID_DEV }}" ]; then
+            echo "PROJECT_ID=${{ '${{' }} secrets.GCP_PROJECT_ID_DEV }}" >> $GITHUB_ENV
+            echo "Using dev-specific secrets"
+          else
+            echo "PROJECT_ID=${{ '${{' }} secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
+            echo "Using shared secrets"
           fi
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v1
         with:
-          credentials_json: ${{ '${{' }} secrets.GCP_SA_KEY }}
+          credentials_json: ${{ '${{' }} secrets.GCP_SA_KEY_DEV || secrets.GCP_SA_KEY }}
 
       - name: Setup Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v1
@@ -93,28 +107,111 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          PROJECT_ID=$(echo "${{ '${{' }} secrets.GCP_PROJECT_ID }}" | tr -d '\n\r')
+          PROJECT_ID=$(echo "${{ '${{' }} env.PROJECT_ID }}" | tr -d '\n\r')
           REGION="${{ '${{' }} env.GCP_REGION }}"
           SERVICE="${{ '${{' }} env.SERVICE_NAME }}"
           IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE}/${SERVICE}"
-          echo "Building image: ${IMAGE}:${{ '${{' }} github.sha }}"
-          docker build -t "${IMAGE}:${{ '${{' }} github.sha }}" -t "${IMAGE}:latest" .
-          docker push "${IMAGE}:${{ '${{' }} github.sha }}"
-          docker push "${IMAGE}:latest"
+          TAG="dev-${{ '${{' }} github.sha }}"
+          echo "Building image: ${IMAGE}:${TAG}"
+          docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:dev-latest" .
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:dev-latest"
 
-      - name: Deploy to Cloud Run
+      - name: Deploy to Cloud Run (Development)
         run: |
-          PROJECT_ID=$(echo "${{ secrets.GCP_PROJECT_ID }}" | tr -d '\n\r')
-          REGION="${{ env.GCP_REGION }}"
-          SERVICE="${{ env.SERVICE_NAME }}"
-      - name: Deploy to Cloud Run
-        run: |
-          PROJECT_ID=$(echo "${{ '${{' }} secrets.GCP_PROJECT_ID }}" | tr -d '\n\r')
+          PROJECT_ID=$(echo "${{ '${{' }} env.PROJECT_ID }}" | tr -d '\n\r')
           REGION="${{ '${{' }} env.GCP_REGION }}"
           SERVICE="${{ '${{' }} env.SERVICE_NAME }}"
-          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE}/${SERVICE}:latest"
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE}/${SERVICE}:dev-latest"
           echo "Deploying image: ${IMAGE}"
-          gcloud run deploy "${SERVICE}" \
+          gcloud run deploy "${SERVICE}-dev" \
+            --image "${IMAGE}" \
+            --platform managed \
+            --region "${REGION}" \
+            --allow-unauthenticated \
+            --port 3001 \
+            --memory 256Mi \
+            --cpu 0.5 \
+            --max-instances 3 \
+            --set-env-vars="NODE_ENV=development,SERVICE_VERSION=dev" \
+            --tag dev
+
+      - name: Get Cloud Run URL
+        run: |
+          URL=$(gcloud run services describe ${{ '${{' }} env.SERVICE_NAME }}-dev \
+            --region=${{ '${{' }} env.GCP_REGION }} \
+            --format='value(status.url)')
+          echo "🌐 Development service deployed at: $URL"
+
+  build-and-deploy-staging:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/staging'
+    environment: staging
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate GCP_PROJECT_ID_STAGING
+        run: |
+          if [ -z "${{ '${{' }} secrets.GCP_PROJECT_ID_STAGING }}" ] && [ -z "${{ '${{' }} secrets.GCP_PROJECT_ID }}" ]; then
+            echo "❌ Neither GCP_PROJECT_ID_STAGING nor GCP_PROJECT_ID is set."
+            echo "Please add one of them to GitHub Secrets."
+            exit 1
+          fi
+
+      - name: Set Project ID and SA Key
+        run: |
+          if [ -n "${{ '${{' }} secrets.GCP_PROJECT_ID_STAGING }}" ]; then
+            echo "PROJECT_ID=${{ '${{' }} secrets.GCP_PROJECT_ID_STAGING }}" >> $GITHUB_ENV
+            echo "Using staging-specific secrets"
+          else
+            echo "PROJECT_ID=${{ '${{' }} secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
+            echo "Using shared secrets"
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ '${{' }} secrets.GCP_SA_KEY_STAGING || secrets.GCP_SA_KEY }}
+
+      - name: Setup Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ '${{' }} env.GCP_REGION }}-docker.pkg.dev
+
+      - name: Ensure Docker repository exists
+        run: |
+          REPO=${{ '${{' }} env.SERVICE_NAME }}
+          gcloud artifacts repositories describe $REPO \
+            --location=${{ '${{' }} env.GCP_REGION }} >/dev/null 2>&1 || \
+          gcloud artifacts repositories create $REPO \
+            --repository-format=docker \
+            --location=${{ '${{' }} env.GCP_REGION }} \
+            --description="Container repo for $REPO"
+
+      - name: Build and push Docker image
+        run: |
+          PROJECT_ID=$(echo "${{ '${{' }} env.PROJECT_ID }}" | tr -d '\n\r')
+          REGION="${{ '${{' }} env.GCP_REGION }}"
+          SERVICE="${{ '${{' }} env.SERVICE_NAME }}"
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE}/${SERVICE}"
+          TAG="staging-${{ '${{' }} github.sha }}"
+          echo "Building image: ${IMAGE}:${TAG}"
+          docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:staging-latest" .
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:staging-latest"
+
+      - name: Deploy to Cloud Run (Staging)
+        run: |
+          PROJECT_ID=$(echo "${{ '${{' }} env.PROJECT_ID }}" | tr -d '\n\r')
+          REGION="${{ '${{' }} env.GCP_REGION }}"
+          SERVICE="${{ '${{' }} env.SERVICE_NAME }}"
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE}/${SERVICE}:staging-latest"
+          echo "Deploying image: ${IMAGE}"
+          gcloud run deploy "${SERVICE}-staging" \
             --image "${IMAGE}" \
             --platform managed \
             --region "${REGION}" \
@@ -122,13 +219,99 @@ jobs:
             --port 3001 \
             --memory 512Mi \
             --cpu 1 \
-            --max-instances 10 \
-            --set-env-vars="NODE_ENV=production"
+            --max-instances 5 \
+            --set-env-vars="NODE_ENV=staging,SERVICE_VERSION=staging" \
+            --tag staging
+
+      - name: Get Cloud Run URL
+        run: |
+          URL=$(gcloud run services describe ${{ '${{' }} env.SERVICE_NAME }}-staging \
+            --region=${{ '${{' }} env.GCP_REGION }} \
+            --format='value(status.url)')
+          echo "🌐 Staging service deployed at: $URL"
+
+  build-and-deploy-prod:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate GCP_PROJECT_ID_PROD
+        run: |
+          if [ -z "${{ '${{' }} secrets.GCP_PROJECT_ID_PROD }}" ] && [ -z "${{ '${{' }} secrets.GCP_PROJECT_ID }}" ]; then
+            echo "❌ Neither GCP_PROJECT_ID_PROD nor GCP_PROJECT_ID is set."
+            echo "Please add one of them to GitHub Secrets."
+            exit 1
+          fi
+
+      - name: Set Project ID and SA Key
+        run: |
+          if [ -n "${{ '${{' }} secrets.GCP_PROJECT_ID_PROD }}" ]; then
+            echo "PROJECT_ID=${{ '${{' }} secrets.GCP_PROJECT_ID_PROD }}" >> $GITHUB_ENV
+            echo "Using prod-specific secrets"
+          else
+            echo "PROJECT_ID=${{ '${{' }} secrets.GCP_PROJECT_ID }}" >> $GITHUB_ENV
+            echo "Using shared secrets"
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ '${{' }} secrets.GCP_SA_KEY_PROD || secrets.GCP_SA_KEY }}
+
+      - name: Setup Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ '${{' }} env.GCP_REGION }}-docker.pkg.dev
+
+      - name: Ensure Docker repository exists
+        run: |
+          REPO=${{ '${{' }} env.SERVICE_NAME }}
+          gcloud artifacts repositories describe $REPO \
+            --location=${{ '${{' }} env.GCP_REGION }} >/dev/null 2>&1 || \
+          gcloud artifacts repositories create $REPO \
+            --repository-format=docker \
+            --location=${{ '${{' }} env.GCP_REGION }} \
+            --description="Container repo for $REPO"
+
+      - name: Build and push Docker image
+        run: |
+          PROJECT_ID=$(echo "${{ '${{' }} env.PROJECT_ID }}" | tr -d '\n\r')
+          REGION="${{ '${{' }} env.GCP_REGION }}"
+          SERVICE="${{ '${{' }} env.SERVICE_NAME }}"
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE}/${SERVICE}"
+          TAG="prod-${{ '${{' }} github.sha }}"
+          echo "Building image: ${IMAGE}:${TAG}"
+          docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:prod-latest" .
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:prod-latest"
+
+      - name: Deploy to Cloud Run (Production)
+        run: |
+          PROJECT_ID=$(echo "${{ '${{' }} env.PROJECT_ID }}" | tr -d '\n\r')
+          REGION="${{ '${{' }} env.GCP_REGION }}"
+          SERVICE="${{ '${{' }} env.SERVICE_NAME }}"
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE}/${SERVICE}:prod-latest"
+          echo "Deploying image: ${IMAGE}"
+          gcloud run deploy "${SERVICE}" \
+            --image "${IMAGE}" \
+            --platform managed \
+            --region "${REGION}" \
+            --allow-unauthenticated \
+            --port 3001 \
+            --memory 1Gi \
+            --cpu 2 \
+            --max-instances 5 \
+            --set-env-vars="NODE_ENV=production,SERVICE_VERSION=production"
 
       - name: Get Cloud Run URL
         run: |
           URL=$(gcloud run services describe ${{ '${{' }} env.SERVICE_NAME }} \
             --region=${{ '${{' }} env.GCP_REGION }} \
             --format='value(status.url)')
-          echo "🌐 Service deployed at: $URL"
-          echo "SERVICE_URL=$URL" >> $GITHUB_ENV
+          echo "🌐 Production service deployed at: $URL"

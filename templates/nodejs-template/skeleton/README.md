@@ -28,14 +28,129 @@ npm run docker:run
 npm run docker:stop
 ```
 
+## 🌍 Environment Management
+
+This service supports three environments with separate configurations and deployments:
+
+### Environments
+
+| Environment | Branch    | Auto-Deploy | Purpose           |
+|------------|-----------|-------------|-------------------|
+| Development| `dev` (default) | ✅ Yes      | Feature development and testing |
+| Staging    | `staging` | ✅ Yes      | Pre-production testing |
+| Production | `main`    | ✅ Yes      | Live production services |
+
+### Environment Configuration
+
+Each environment has its own configuration file:
+- `.env.dev` - Development settings (low resources, debug logging)
+- `.env.staging` - Staging settings (moderate resources, info logging)  
+- `.env.prod` - Production settings (high resources, minimal logging)
+
+### Development Workflow (Industry Standard)
+
+```mermaid
+graph LR
+    A[Direct Push] --> B[dev branch]
+    B --> C[staging branch]
+    C --> D[main branch]
+    
+    B --> E[Dev Environment]
+    C --> F[Staging Environment]
+    D --> G[Production Environment]
+```
+
+1. **New Service**: Repository created with `dev` as default branch → Auto-deploy to dev
+2. **Feature Development**: 
+   - Push directly to `dev` branch (no PR required)
+   - Push triggers dev deployment automatically
+3. **Staging Release**: 
+   - Create PR from `dev` to `staging`
+   - Merge triggers staging deployment
+4. **Production Release**: 
+   - Create PR from `staging` to `main`
+   - Merge triggers production deployment
+
+### Branch Protection Rules
+
+| Branch   | Direct Commits | PR Required | Purpose           |
+|----------|----------------|-------------|-------------------|
+| dev      | ✅ Allowed     | ❌ No       | Fast development iteration |
+| staging  | ❌ Blocked     | ✅ Yes      | Pre-production testing |
+| main     | ❌ Blocked     | ✅ Yes      | Production releases |
+
+### Quick Start After Repo Creation
+
+**Option 1: Automatic Setup (preferred)**
+The repository should automatically set up environment branches via GitHub Actions.
+
+**Option 2: Manual Setup (if automatic fails)**
+
+```bash
+# Clone your new repository
+git clone <your-repo-url>
+cd ${{ values.component_id }}
+
+# The repo starts with 'dev' as default branch
+# Create staging and main branches:
+git checkout -b staging
+git push origin staging
+
+git checkout -b main  
+git push origin main
+
+# Return to dev branch for development
+git checkout dev
+
+# Start developing
+git add .
+git commit -m "Initial development"
+git push origin dev  # This will deploy to development environment
+```
+
+### Development Workflow
+
+1. **Development**: Push directly to `dev` branch → Auto-deploy to dev environment
+2. **Staging**: Create PR `dev → staging` → Auto-deploy to staging environment  
+3. **Production**: Create PR `staging → main` → Auto-deploy to production environment
+
+### Manual Deployment
+
+You can also deploy manually to any environment:
+
+```bash
+# Deploy to development
+npm run deploy:dev
+
+# Deploy to staging  
+npm run deploy:staging
+
+# Deploy to production
+npm run deploy:production
+```
+
+### Environment Secrets
+
+Each environment requires its own GitHub Secrets:
+
+**Development:**
+- `GCP_PROJECT_ID_DEV`: Your GCP project ID for development
+- `GCP_SA_KEY_DEV`: Service Account Key (JSON) for development
+
+**Staging:**
+- `GCP_PROJECT_ID_STAGING`: Your GCP project ID for staging
+- `GCP_SA_KEY_STAGING`: Service Account Key (JSON) for staging
+
+**Production:**
+- `GCP_PROJECT_ID_PROD`: Your GCP project ID for production
+- `GCP_SA_KEY_PROD`: Service Account Key (JSON) for production
+
 ## ☁️ Cloud Deployment
 
 ### Prerequisites
-1. **Google Cloud Project** with billing enabled
+1. **Google Cloud Projects** - Separate projects for each environment (recommended)
 2. **gcloud CLI** installed and authenticated
 3. **Docker** installed locally
-
-### Setup GCP (One-time)
 ```bash
 # Option 1: Use automated setup script
 chmod +x setup-gcp.sh
@@ -120,8 +235,12 @@ When you push to the `main` branch, GitHub Actions will automatically:
 | `npm run docker:build` | Build Docker image |
 | `npm run docker:run` | Run Docker container locally |
 | `npm run docker:stop` | Stop Docker container |
-| `npm run deploy:staging` | Deploy to GCP staging |
-| `npm run deploy:production` | Deploy to GCP production |
+| `npm run deploy:dev` | Deploy to development environment |
+| `npm run deploy:staging` | Deploy to staging environment |
+| `npm run deploy:production` | Deploy to production environment |
+| `npm run env:dev` | Set development environment variables |
+| `npm run env:staging` | Set staging environment variables |
+| `npm run env:prod` | Set production environment variables |
 
 ## 🛠️ Development Guide
 

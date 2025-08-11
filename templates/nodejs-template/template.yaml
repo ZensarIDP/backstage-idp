@@ -65,7 +65,7 @@ spec:
       input:
         description: This is ${{ parameters.component_id }}
         repoUrl: ${{ parameters.repoUrl }}
-        defaultBranch: main
+        defaultBranch: dev
         repoVisibility: public
 
     - id: register
