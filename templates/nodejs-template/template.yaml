@@ -45,6 +45,11 @@ spec:
           ui:options:
             allowedHosts:
               - github.com
+              - bitbucket.org
+            allowedOwners:
+              - ZensarIDP
+            allowedWorkspaces:
+              - ZensarIDP
 
   steps:
     - id: template
@@ -58,9 +63,37 @@ spec:
           description: ${{ parameters.description }}
           destination: ${{ parameters.repoUrl | parseRepoUrl }}
           owner: ${{ parameters.owner }}
+          repoHost: ${{ parameters.repoUrl | parseRepoUrl | pick('host') | replace('github.com', 'github') | replace('bitbucket.org', 'bitbucket') }}
 
-    - id: publish
-      name: Publish
+    - id: setup-github-workflows
+      name: Setup GitHub Workflows
+      if: ${{ (parameters.repoUrl | parseRepoUrl).host === 'github.com' }}
+      action: fetch:template
+      input:
+        url: ./skeleton/ci-cd/github
+        targetPath: .github
+        values:
+          component_id: ${{ parameters.component_id }}
+          description: ${{ parameters.description }}
+          destination: ${{ parameters.repoUrl | parseRepoUrl }}
+          owner: ${{ parameters.owner }}
+
+    - id: setup-bitbucket-pipelines
+      name: Setup Bitbucket Pipelines
+      if: ${{ (parameters.repoUrl | parseRepoUrl).host === 'bitbucket.org' }}
+      action: fetch:template
+      input:
+        url: ./skeleton/ci-cd/bitbucket
+        targetPath: .
+        values:
+          component_id: ${{ parameters.component_id }}
+          description: ${{ parameters.description }}
+          destination: ${{ parameters.repoUrl | parseRepoUrl }}
+          owner: ${{ parameters.owner }}
+
+    - id: publish-github
+      name: Publish to GitHub
+      if: ${{ (parameters.repoUrl | parseRepoUrl).host === 'github.com' }}
       action: publish:github
       input:
         description: This is ${{ parameters.component_id }}
@@ -68,17 +101,36 @@ spec:
         defaultBranch: dev
         repoVisibility: public
 
-    - id: register
-      name: Register
+    - id: publish-bitbucket
+      name: Publish to Bitbucket Cloud
+      if: ${{ (parameters.repoUrl | parseRepoUrl).host === 'bitbucket.org' }}
+      action: publish:bitbucketCloud
+      input:
+        description: This is ${{ parameters.component_id }}
+        repoUrl: ${{ parameters.repoUrl }}
+        defaultBranch: dev
+        repoVisibility: public
+
+    - id: register-github
+      name: Register in Catalog (GitHub)
+      if: ${{ (parameters.repoUrl | parseRepoUrl).host === 'github.com' }}
       action: catalog:register
       input:
-        repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}
+        repoContentsUrl: ${{ steps['publish-github'].output.repoContentsUrl }}
+        catalogInfoPath: '/catalog-info.yaml'
+
+    - id: register-bitbucket
+      name: Register in Catalog (Bitbucket)
+      if: ${{ (parameters.repoUrl | parseRepoUrl).host === 'bitbucket.org' }}
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps['publish-bitbucket'].output.repoContentsUrl }}
         catalogInfoPath: '/catalog-info.yaml'
 
   output:
     links:
       - title: Repository
-        url: ${{ steps.publish.output.remoteUrl }}
+        url: ${{ (parameters.repoUrl | parseRepoUrl).host === 'github.com' and steps['publish-github'].output.remoteUrl or 'https://bitbucket.org/zensaridp/' + parameters.component_id }}
       - title: Open in catalog
         icon: catalog
-        entityRef: ${{ steps.register.output.entityRef }}
+        entityRef: component:default/${{ parameters.component_id }}

@@ -1,0 +1,83 @@
+# Bitbucket Pipelines configuration for ${{ values.component_id }}
+image: node:18
+
+definitions:
+  services:
+    docker:
+      memory: 2048
+
+  steps:
+    - step: &test
+        name: Test
+        caches:
+          - node
+        script:
+          - npm install
+          - npm test
+          - echo "Building image ${BITBUCKET_REPO_SLUG}:${BITBUCKET_COMMIT}"
+          - docker build -t ${BITBUCKET_REPO_SLUG}:${BITBUCKET_COMMIT} .
+          - |
+            PORT=$(( ( RANDOM % 1000 ) + 8000 ))
+            docker run -d -p $PORT:3001 --name test-container ${BITBUCKET_REPO_SLUG}:${BITBUCKET_COMMIT}
+            sleep 10
+            curl -f http://localhost:$PORT || (docker logs test-container && exit 1)
+            docker stop test-container
+            docker rm test-container
+        services:
+          - docker
+
+    - step: &build-and-deploy-dev
+        name: Build and Deploy to Development
+        deployment: development
+        script:
+          - echo "Deploying ${{ values.component_id }} to development environment"
+          - echo "Using GCP_PROJECT_ID_DEV=${GCP_PROJECT_ID_DEV}"
+          - echo "Branch ${BITBUCKET_BRANCH} - Commit ${BITBUCKET_COMMIT}"
+          # Add your GCP deployment logic here
+          # Example:
+          # - pip install google-cloud-sdk
+          # - echo $GCP_SA_KEY_DEV | base64 -d > gcp-key.json
+          # - gcloud auth activate-service-account --key-file gcp-key.json
+          # - gcloud config set project $GCP_PROJECT_ID_DEV
+          # - gcloud builds submit --tag gcr.io/$GCP_PROJECT_ID_DEV/${{ values.component_id }}:${BITBUCKET_COMMIT}
+          # - gcloud run deploy ${{ values.component_id }} --image gcr.io/$GCP_PROJECT_ID_DEV/${{ values.component_id }}:${BITBUCKET_COMMIT} --platform managed --region us-central1
+
+    - step: &build-and-deploy-staging
+        name: Build and Deploy to Staging
+        deployment: staging
+        script:
+          - echo "Deploying ${{ values.component_id }} to staging environment"
+          - echo "Using GCP_PROJECT_ID_STAGING=${GCP_PROJECT_ID_STAGING}"
+          - echo "Branch ${BITBUCKET_BRANCH} - Commit ${BITBUCKET_COMMIT}"
+          # Add your GCP deployment logic here
+
+    - step: &build-and-deploy-prod
+        name: Build and Deploy to Production
+        deployment: production
+        trigger: manual
+        script:
+          - echo "Deploying ${{ values.component_id }} to production environment"
+          - echo "Using GCP_PROJECT_ID_PROD=${GCP_PROJECT_ID_PROD}"
+          - echo "Branch ${BITBUCKET_BRANCH} - Commit ${BITBUCKET_COMMIT}"
+          # Add your GCP deployment logic here
+
+pipelines:
+  branches:
+    dev:
+      - step: *test
+      - step: *build-and-deploy-dev
+    staging:
+      - step: *test
+      - step: *build-and-deploy-staging
+    main:
+      - step: *test
+      - step: *build-and-deploy-prod
+
+  pull-requests:
+    '**':
+      - step: *test
+
+  tags:
+    'v*':
+      - step: *test
+      - step: *build-and-deploy-prod

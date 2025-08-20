@@ -4,8 +4,12 @@ metadata:
   name: ${{ values.component_id }}
   description: ${{ values.description }}
   annotations:
+    {%- if values.repoHost == 'github' %}
     github.com/project-slug: ${{ values.destination.owner }}/${{ values.destination.repo }}
     github.com/workflows: ci.yml
+    {%- elif values.repoHost == 'bitbucket' %}
+    bitbucket.org/project-key: ${{ values.destination.owner }}/${{ values.destination.repo }}
+    {%- endif %}
     backstage.io/environments: 'dev,staging,prod'
   tags:
     - nodejs

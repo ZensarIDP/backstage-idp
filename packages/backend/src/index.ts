@@ -10,10 +10,12 @@ import { createBackend } from '@backstage/backend-defaults';
 
 const backend = createBackend();
 
+
 backend.add(import('@backstage/plugin-app-backend'));
 backend.add(import('@backstage/plugin-proxy-backend'));
 backend.add(import('@backstage/plugin-scaffolder-backend'));
 backend.add(import('@backstage/plugin-scaffolder-backend-module-github'));
+backend.add(import('@backstage/plugin-scaffolder-backend-module-bitbucket-cloud'));
 backend.add(import('@backstage/plugin-techdocs-backend'));
 
 
@@ -22,6 +24,7 @@ backend.add(import('@backstage/plugin-auth-backend'));
 // See https://backstage.io/docs/backend-system/building-backends/migrating#the-auth-plugin
 backend.add(import('@backstage/plugin-auth-backend-module-guest-provider'));
 backend.add(import('@backstage/plugin-auth-backend-module-github-provider'));
+backend.add(import('@backstage/plugin-auth-backend-module-bitbucket-provider'));
 // See https://backstage.io/docs/auth/guest/provider
 
 // catalog plugin

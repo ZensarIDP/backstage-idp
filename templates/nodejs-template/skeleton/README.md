@@ -2,6 +2,16 @@
 
 ${{ values.description }}
 
+## 🏠 Repository Host
+
+This service is hosted on **{%- if values.repoHost == 'github' %}GitHub{%- elif values.repoHost == 'bitbucket' %}Bitbucket{%- endif %}**.
+
+{%- if values.repoHost == 'github' %}
+🔗 **Repository**: [https://github.com/${{ values.destination.owner }}/${{ values.destination.repo }}](https://github.com/${{ values.destination.owner }}/${{ values.destination.repo }})
+{%- elif values.repoHost == 'bitbucket' %}
+🔗 **Repository**: [https://bitbucket.org/${{ values.destination.owner }}/${{ values.destination.repo }}](https://bitbucket.org/${{ values.destination.owner }}/${{ values.destination.repo }})
+{%- endif %}
+
 ## 🚀 Quick Start
 
 ### Local Development
@@ -27,6 +37,58 @@ npm run docker:run
 # Stop container
 npm run docker:stop
 ```
+
+## 🔄 CI/CD Configuration
+
+This repository includes a well-organized CI/CD setup that automatically deploys the appropriate configuration based on your chosen repository platform.
+
+### 📂 CI/CD Organization
+
+The template source maintains separate, organized CI/CD configurations:
+
+```
+ci-cd/
+├── github/              # GitHub Actions workflows
+│   ├── workflows/       # GitHub workflow files  
+│   └── README.md       # GitHub-specific setup guide
+└── bitbucket/          # Bitbucket Pipelines
+    ├── bitbucket-pipelines.yml # Bitbucket configuration
+    └── README.md       # Bitbucket-specific setup guide
+```
+
+### 🚀 Deployed Configuration
+
+{%- if values.repoHost == 'github' %}
+Your repository is hosted on **GitHub**, so **GitHub Actions** has been deployed:
+- ✅ **Active**: `.github/workflows/` - GitHub Actions CI/CD pipelines
+- 📖 **Documentation**: Platform-specific setup instructions included
+- 🔧 **Setup Required**: Configure GitHub Secrets for GCP deployment
+
+**GitHub Actions Features:**
+- Comprehensive CI/CD with testing and deployment
+- Multi-environment support (dev, staging, production)
+- Automatic branch setup and protection
+- GCP Cloud Run deployment integration
+
+{%- elif values.repoHost == 'bitbucket' %}
+Your repository is hosted on **Bitbucket**, so **Bitbucket Pipelines** has been deployed:
+- ✅ **Active**: `bitbucket-pipelines.yml` - Bitbucket Pipelines configuration
+- 📖 **Documentation**: Platform-specific setup instructions included  
+- 🔧 **Setup Required**: Configure Bitbucket Repository Variables for GCP deployment
+
+**Bitbucket Pipelines Features:**
+- Complete CI/CD with testing and deployment
+- Docker-based builds and testing
+- Environment-specific deployments (development, staging, production)
+- Manual production deployments for safety
+{%- endif %}
+
+### 🎯 Clean Repository Structure
+
+Only the relevant CI/CD configuration for your chosen platform is deployed, ensuring:
+- **No Clutter**: Only active CI/CD files in your repository
+- **Platform-Optimized**: Configuration tailored for your chosen platform
+- **Clear Documentation**: Platform-specific setup guides included
 
 ## 🌍 Environment Management
 
@@ -81,6 +143,8 @@ graph LR
 
 ### Quick Start After Repo Creation
 
+{%- if values.repoHost == 'github' %}
+
 **Option 1: Automatic Setup (preferred)**
 The repository should automatically set up environment branches via GitHub Actions.
 
@@ -88,25 +152,41 @@ The repository should automatically set up environment branches via GitHub Actio
 
 ```bash
 # Clone your new repository
-git clone <your-repo-url>
+git clone https://github.com/${{ values.destination.owner }}/${{ values.destination.repo }}.git
 cd ${{ values.component_id }}
 
-# The repo starts with 'dev' as default branch
-# Create staging and main branches:
-git checkout -b staging
-git push origin staging
-
-git checkout -b main  
-git push origin main
-
-# Return to dev branch for development
-git checkout dev
+# Run the branch setup script
+chmod +x setup-branches.sh
+./setup-branches.sh
 
 # Start developing
 git add .
 git commit -m "Initial development"
 git push origin dev  # This will deploy to development environment
 ```
+
+{%- elif values.repoHost == 'bitbucket' %}
+
+**Manual Setup Required**
+
+```bash
+# Clone your new repository
+git clone https://bitbucket.org/${{ values.destination.owner }}/${{ values.destination.repo }}.git
+cd ${{ values.component_id }}
+
+# Run the branch setup script
+chmod +x setup-branches.sh
+./setup-branches.sh
+
+# Start developing
+git add .
+git commit -m "Initial development"
+git push origin dev  # This will deploy to development environment
+```
+
+**Note**: For Bitbucket, you'll need to manually configure branch permissions and deployment environments in the Bitbucket repository settings.
+
+{%- endif %}
 
 ### Development Workflow
 
@@ -131,6 +211,8 @@ npm run deploy:production
 
 ### Environment Secrets
 
+{%- if values.repoHost == 'github' %}
+
 Each environment requires its own GitHub Secrets:
 
 **Development:**
@@ -144,6 +226,35 @@ Each environment requires its own GitHub Secrets:
 **Production:**
 - `GCP_PROJECT_ID_PROD`: Your GCP project ID for production
 - `GCP_SA_KEY_PROD`: Service Account Key (JSON) for production
+
+**How to set GitHub Secrets:**
+1. Go to your repository settings
+2. Navigate to "Secrets and variables" > "Actions"
+3. Add the required secrets for each environment
+
+{%- elif values.repoHost == 'bitbucket' %}
+
+Each environment requires its own Bitbucket Repository Variables:
+
+**Development:**
+- `GCP_PROJECT_ID_DEV`: Your GCP project ID for development
+- `GCP_SA_KEY_DEV`: Service Account Key (JSON) for development
+
+**Staging:**
+- `GCP_PROJECT_ID_STAGING`: Your GCP project ID for staging
+- `GCP_SA_KEY_STAGING`: Service Account Key (JSON) for staging
+
+**Production:**
+- `GCP_PROJECT_ID_PROD`: Your GCP project ID for production
+- `GCP_SA_KEY_PROD`: Service Account Key (JSON) for production
+
+**How to set Bitbucket Variables:**
+1. Go to your repository settings
+2. Navigate to "Repository variables"
+3. Add the required variables for each environment
+4. Mark sensitive variables as "Secured"
+
+{%- endif %}
 
 ## ☁️ Cloud Deployment
 
