@@ -1,0 +1,228 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: aspnet-webapp-template
+  title: ASP.NET Web App Template
+  description: Create a new ASP.NET Web App (frontend) with GCP deployment and infrastructure provisioning
+  tags:
+    - dotnet
+    - webapp
+    - frontend
+    - gcp
+    - recommended
+spec:
+  owner: platform-team
+  type: service
+  parameters:
+    - title: Basic Information
+      required:
+        - name
+        - description
+        - owner
+      properties:
+        name:
+          title: Name
+          type: string
+          pattern: '^[a-z0-9-]+$'
+          description: Unique name of the component (lowercase, numbers, hyphens only)
+          ui:autofocus: true
+          ui:help: 'This will be used as the service name and repository name'
+        description:
+          title: Description
+          type: string
+          description: Help others understand what this service is for
+        owner:
+          title: Owner
+          type: string
+          description: Owner of the component
+          ui:field: OwnerPicker
+          ui:options:
+            catalogFilter:
+              kind: Group
+    
+    - title: Repository
+      required:
+        - repoUrl
+      properties:
+        repoUrl:
+          title: Repository Location
+          type: string
+          ui:field: RepoUrlPicker
+          ui:options:
+            allowedHosts:
+              - github.com
+            allowedOwners:
+              - zensaridp
+    
+    - title: Cloud & Deployment Configuration
+      required:
+        - cloudProvider
+        - deploymentTarget
+      properties:
+        cloudProvider:
+          title: Cloud Provider
+          type: string
+          description: Select your cloud provider
+          default: gcp
+          enum:
+            - gcp
+          enumNames:
+            - Google Cloud Platform
+          ui:widget: radio
+        
+        deploymentTarget:
+          title: Deployment Target
+          type: string
+          description: How do you want to deploy your application?
+          enum:
+            - gke
+            - cloudrun
+          enumNames:
+            - Google Kubernetes Engine (GKE)
+            - Cloud Run
+          ui:widget: radio
+      dependencies:
+        deploymentTarget:
+          oneOf:
+            - properties:
+                deploymentTarget:
+                  enum: ["gke"]
+                gkeRegion:
+                  title: GKE Region/Zone
+                  type: string
+                  description: "🟢 GKE ONLY: Region or zone where your GKE cluster is located (e.g., us-central1, us-central1-a)"
+                gkeClusterName:
+                  title: GKE Cluster Name
+                  type: string
+                  description: "🟢 GKE ONLY: Name of your existing GKE cluster"
+                gkeNamespace:
+                  title: Kubernetes Namespace
+                  type: string
+                  description: "🟢 GKE ONLY: Kubernetes namespace to deploy to"
+                  default: default
+              required: ["gkeRegion", "gkeClusterName", "gkeNamespace"]
+            - properties:
+                deploymentTarget:
+                  enum: ["cloudrun"]
+                cloudRunRegion:
+                  title: Cloud Run Region
+                  type: string
+                  description: "🔵 CLOUD RUN ONLY: Region where your Cloud Run service will be deployed"
+                  default: asia-south1
+              required: ["cloudRunRegion"]
+    
+    - title: Infrastructure Configuration
+      required:
+        - gcpProjectId
+        - gcpRegion
+        - databaseName
+      properties:
+        gcpProjectId:
+          title: GCP Project ID
+          type: string
+          description: Your Google Cloud Project ID
+          pattern: '^[a-z][a-z0-9-]{4,28}[a-z0-9]$'
+        
+        gcpRegion:
+          title: GCP Region
+          type: string
+          description: Google Cloud region for your resources
+          default: asia-south1
+          enum:
+            - asia-south1
+            - us-central1
+            - us-east1
+            - us-east4
+            - us-west1
+            - us-west2
+            - europe-west1
+            - europe-west2
+            - europe-west3
+            - asia-southeast1
+            - asia-northeast1
+          enumNames:
+            - asia-south1 (Mumbai) - Recommended for India
+            - us-central1 (Iowa)
+            - us-east1 (South Carolina)
+            - us-east4 (Northern Virginia)
+            - us-west1 (Oregon)
+            - us-west2 (Los Angeles)
+            - europe-west1 (Belgium)
+            - europe-west2 (London)
+            - europe-west3 (Frankfurt)
+            - asia-southeast1 (Singapore)
+            - asia-northeast1 (Tokyo)
+            - asia-southeast1 (Singapore)
+            - asia-northeast1 (Tokyo)
+        
+        databaseName:
+          title: Database Name
+          type: string
+          description: Name for your database (alphanumeric and hyphens only)
+          pattern: '^[a-zA-Z][a-zA-Z0-9-]*$'
+          default: myapp-db
+        
+        database:
+          title: Database Type
+          type: string
+          description: Select a database for your application
+          default: mysql
+          enum:
+            - mysql
+            - postgresql
+          enumNames:
+            - MySQL (Cloud SQL)
+            - PostgreSQL (Cloud SQL)
+          ui:widget: radio
+
+  steps:
+    - id: fetch
+      name: Fetch Template
+      action: fetch:template
+      input:
+        url: ./skeleton
+        replace: true
+        values:
+          name: ${{ parameters.name }}
+          description: ${{ parameters.description }}
+          owner: ${{ parameters.owner }}
+          destination: ${{ parameters.repoUrl | parseRepoUrl }}
+          repoHost: ${{ parameters.repoUrl | parseRepoUrl | pick('host') | replace('github.com', 'github') | replace('bitbucket.org', 'bitbucket') }}
+          repoUrl: ${{ parameters.repoUrl }}
+          cloudProvider: ${{ parameters.cloudProvider }}
+          deploymentTarget: ${{ parameters.deploymentTarget }}
+          gkeRegion: ${{ parameters.gkeRegion }}
+          gkeClusterName: ${{ parameters.gkeClusterName }}
+          gkeNamespace: ${{ parameters.gkeNamespace }}
+          cloudRunRegion: ${{ parameters.cloudRunRegion }}
+          database: ${{ parameters.database }}
+          gcpProjectId: ${{ parameters.gcpProjectId }}
+          gcpRegion: ${{ parameters.gcpRegion }}
+          databaseName: ${{ parameters.databaseName }}
+
+    - id: publish
+      name: Publish to GitHub
+      action: publish:github
+      input:
+        description: ${{ parameters.description }}
+        repoUrl: ${{ parameters.repoUrl }}
+        defaultBranch: main
+        repoVisibility: public
+        gitCommitMessage: 'Initial commit: ASP.NET Web App service scaffolding'
+        gitAuthorName: 'Backstage'
+        gitAuthorEmail: 'backstage@example.com'
+
+    - id: register
+      name: Register in Catalog
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}
+        catalogInfoPath: '/catalog-info.yaml'
+
+  output:
+    links:
+      - title: Repository
+        url: ${{ steps.publish.output.remoteUrl }}
+      - title: Open in catalog
+        icon: catalog
+        entityRef: ${{ steps.register.output.entityRef }}

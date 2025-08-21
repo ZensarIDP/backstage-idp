@@ -1,0 +1,52 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: {{ values.name }}
+  description: {{ values.description }}
+  annotations:
+    github.com/project-slug: {{ values.repoUrl | gitHubSlugFromUrl }}
+    backstage.io/techdocs-ref: dir:.
+  tags:
+    - dotnet
+    - aspnet
+    - webapp
+    - frontend
+    - {{ values.deploymentTarget }}
+    - gcp
+  links:
+    - url: https://github.com/{{ values.repoUrl | gitHubSlugFromUrl }}
+      title: Repository
+      icon: github
+{% if values.deploymentTarget == 'gke' -%}
+    - url: https://console.cloud.google.com/kubernetes/workload/overview?project={{ values.gcpProjectId }}
+      title: GKE Workloads
+      icon: dashboard
+{% elif values.deploymentTarget == 'cloudrun' -%}
+    - url: https://console.cloud.google.com/run?project={{ values.gcpProjectId }}
+      title: Cloud Run Services
+      icon: dashboard
+{% endif -%}
+{% if values.database != 'none' -%}
+    - url: https://console.cloud.google.com/sql/instances?project={{ values.gcpProjectId }}
+      title: Cloud SQL
+      icon: database
+{% endif -%}
+{% if values.enableBucket -%}
+    - url: https://console.cloud.google.com/storage/browser?project={{ values.gcpProjectId }}
+      title: Cloud Storage
+      icon: storage
+{% endif %}
+spec:
+  type: website
+  lifecycle: experimental
+  owner: {{ values.owner }}
+  system: {{ values.name }}-system
+  consumesApis: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: {{ values.name }}-system
+  description: {{ values.description }} System
+spec:
+  owner: {{ values.owner }}

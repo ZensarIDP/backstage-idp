@@ -31,7 +31,7 @@ backend:
 
 integrations:
   github:
-    - host: github.com
+    - host: 
       token: 
   
   bitbucketCloud:
@@ -99,6 +99,18 @@ catalog:
     # Node.js starter template
     - type: file
       target: ../../templates/nodejs-template/template.yaml
+      rules:
+        - allow: [Template]
+
+    # ASP.NET Web API template
+    - type: file
+      target: ../../templates/aspnet-webapi-template/template.yaml
+      rules:
+        - allow: [Template]
+
+    # ASP.NET Web App template
+    - type: file
+      target: ../../templates/aspnet-webapp-template/template.yaml
       rules:
         - allow: [Template]
 

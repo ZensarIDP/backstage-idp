@@ -1,0 +1,39 @@
+{% if values.database != 'none' -%}
+output "database_connection_name" {
+  description = "The connection name of the database instance"
+  value       = google_sql_database_instance.main.connection_name
+}
+
+output "database_name" {
+  description = "The name of the database"
+  value       = google_sql_database.database.name
+}
+
+output "database_user" {
+  description = "The database user"
+  value       = google_sql_user.user.name
+}
+
+output "database_password" {
+  description = "The database password"
+  value       = random_password.db_password.result
+  sensitive   = true
+}
+
+output "database_public_ip" {
+  description = "The public IP address of the database instance"
+  value       = google_sql_database_instance.main.public_ip_address
+}
+{% endif -%}
+
+{% if values.enableBucket -%}
+output "bucket_name" {
+  description = "The name of the GCS bucket"
+  value       = google_storage_bucket.bucket.name
+}
+
+output "bucket_url" {
+  description = "The URL of the GCS bucket"
+  value       = google_storage_bucket.bucket.url
+}
+{% endif %}

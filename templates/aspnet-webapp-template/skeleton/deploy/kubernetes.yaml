@@ -1,0 +1,123 @@
+{% if values.deploymentTarget == 'gke' -%}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ values.name }}
+  namespace: {{ values.gkeNamespace }}
+  labels:
+    app: {{ values.name }}
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: {{ values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ values.name }}
+        version: v1
+    spec:
+      containers:
+      - name: {{ values.name }}
+        image: {{ values.gkeRegion }}-docker.pkg.dev/{{ values.gcpProjectId }}/{{ values.name }}/{{ values.name }}:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          value: "Production"
+        - name: ASPNETCORE_URLS
+          value: "http://+:8080"
+{% if values.database != 'none' -%}
+        - name: DB_CONNECTION_NAME
+          value: "{{ values.gcpProjectId }}:{{ values.gkeRegion or values.cloudRunRegion }}:{{ values.name }}-db"
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ values.name }}-secrets
+              key: db-name
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ values.name }}-secrets
+              key: db-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ values.name }}-secrets
+              key: db-password
+{% endif -%}
+{% if values.enableBucket -%}
+        - name: GCS_BUCKET_NAME
+          value: "{{ values.gcpProjectId }}-{{ values.bucketName or values.name }}-bucket"
+{% endif -%}
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+{% if values.database != 'none' -%}
+      # Cloud SQL Proxy sidecar
+      - name: cloud-sql-proxy
+        image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:latest
+        args:
+          - "--structured-logs"
+          - "--port=5432"
+          - "{{ values.gcpProjectId }}:{{ values.gkeRegion or values.cloudRunRegion }}:{{ values.name }}-db"
+        securityContext:
+          runAsNonRoot: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+{% endif -%}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ values.name }}
+  namespace: {{ values.gkeNamespace }}
+  labels:
+    app: {{ values.name }}
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: {{ values.name }}
+---
+{% if values.database != 'none' -%}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ values.name }}-secrets
+  namespace: {{ values.gkeNamespace }}
+type: Opaque
+data:
+  # These values should be set manually or via CI/CD
+  # Base64 encoded values
+  db-name: {{ values.name | replace('-', '_') | b64encode }}
+  db-user: {{ values.name }}_user | b64encode
+  db-password: # Set this manually or via CI/CD
+{% endif -%}
+{% endif %}

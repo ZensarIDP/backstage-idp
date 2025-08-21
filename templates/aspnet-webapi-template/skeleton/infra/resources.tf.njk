@@ -1,0 +1,80 @@
+{% if values.database != 'none' -%}
+# Random password for database
+resource "random_password" "db_password" {
+  length  = 16
+  special = true
+}
+
+# Cloud SQL Database Instance
+resource "google_sql_database_instance" "main" {
+  name             = "{{ values.name }}-db"
+  database_version = "{% if values.database == 'mysql' %}MYSQL_8_0{% elif values.database == 'postgresql' %}POSTGRES_15{% endif %}"
+  region          = var.region
+  
+  settings {
+    tier              = "db-f1-micro"
+    availability_type = "ZONAL"
+    disk_type         = "PD_SSD"
+    disk_size         = 20
+    
+    backup_configuration {
+      enabled = true
+      start_time = "03:00"
+    }
+    
+    ip_configuration {
+      ipv4_enabled    = true
+      authorized_networks {
+        name  = "all"
+        value = "0.0.0.0/0"
+      }
+    }
+  }
+  
+  deletion_protection = false
+}
+
+# Database
+resource "google_sql_database" "database" {
+  name     = "{{ values.name | replace('-', '_') }}"
+  instance = google_sql_database_instance.main.name
+}
+
+# Database User
+resource "google_sql_user" "user" {
+  name     = "{{ values.name }}_user"
+  instance = google_sql_database_instance.main.name
+  password = random_password.db_password.result
+}
+{% endif -%}
+
+{% if values.enableBucket -%}
+# GCS Bucket
+resource "google_storage_bucket" "bucket" {
+  name          = var.bucket_name
+  location      = var.region
+  force_destroy = true
+  
+  uniform_bucket_level_access = true
+  
+  versioning {
+    enabled = true
+  }
+  
+  lifecycle_rule {
+    condition {
+      age = 30
+    }
+    action {
+      type = "Delete"
+    }
+  }
+}
+
+# Bucket IAM
+resource "google_storage_bucket_iam_member" "bucket_admin" {
+  bucket = google_storage_bucket.bucket.name
+  role   = "roles/storage.admin"
+  member = "serviceAccount:${var.project_id}@appspot.gserviceaccount.com"
+}
+{% endif %}
