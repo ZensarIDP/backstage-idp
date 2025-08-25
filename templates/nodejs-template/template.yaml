@@ -34,6 +34,7 @@ spec:
           ui:options:
             catalogFilter:
               kind: Group
+
     - title: Choose a location
       required:
         - repoUrl
@@ -45,11 +46,135 @@ spec:
           ui:options:
             allowedHosts:
               - github.com
-              - bitbucket.org
             allowedOwners:
               - ZensarIDP
-            allowedWorkspaces:
-              - ZensarIDP
+
+    - title: Cloud Configuration
+      required:
+        - deploymentType
+        - project_id
+        - region
+      properties:
+        project_id:
+          title: Google Cloud Project ID
+          type: string
+          description: Your Google Cloud Project ID
+          default: dev-zephyr-352206
+        region:
+          title: Google Cloud Region
+          type: string
+          description: Primary region for your resources
+          default: asia-south1
+          enum:
+            - asia-south1
+            - us-central1
+            - europe-west1
+            - us-east1
+          enumNames:
+            - Asia South 1 (Mumbai)
+            - US Central 1 (Iowa)
+            - Europe West 1 (Belgium)
+            - US East 1 (South Carolina)
+        cloudProvider:
+          title: Cloud Provider
+          type: string
+          description: Select your cloud provider
+          default: gcp
+          enum:
+            - gcp
+          enumNames:
+            - Google Cloud Platform
+          ui:widget: radio
+        deploymentType:
+          title: Deployment Type
+          type: string
+          description: Choose how you want to deploy your application
+          default: cloudrun
+          enum:
+            - cloudrun
+            - gke
+          enumNames:
+            - Cloud Run (Serverless)
+            - Google Kubernetes Engine (GKE)
+          ui:widget: radio
+        gkeClusterName:
+          title: GKE Cluster Name
+          type: string
+          description: Name of the existing GKE cluster
+          default: zenhotel-cluster
+          ui:options:
+            condition:
+              properties:
+                deploymentType:
+                  const: gke
+        gkeRegion:
+          title: GKE Region
+          type: string
+          description: Region where the GKE cluster is located
+          default: asia-south1
+          ui:options:
+            condition:
+              properties:
+                deploymentType:
+                  const: gke
+        gkeNamespace:
+          title: GKE Namespace
+          type: string
+          description: Kubernetes namespace for deployment
+          default: default
+          ui:options:
+            condition:
+              properties:
+                deploymentType:
+                  const: gke
+
+    - title: Database Configuration (Optional)
+      properties:
+        setupDatabase:
+          title: Setup Database
+          type: boolean
+          description: Do you want to setup a database?
+          default: false
+          ui:widget: checkbox
+        databaseType:
+          title: Database Type
+          type: string
+          description: Choose your database type
+          default: mysql
+          enum:
+            - mysql
+            - postgresql
+          enumNames:
+            - MySQL
+            - PostgreSQL
+          ui:widget: radio
+          ui:options:
+            condition:
+              properties:
+                setupDatabase:
+                  const: true
+        dbName:
+          title: Database Name
+          type: string
+          description: Name of the database
+          default: appdb
+          pattern: '^[a-z][a-z0-9_]*$'
+          ui:options:
+            condition:
+              properties:
+                setupDatabase:
+                  const: true
+        dbUser:
+          title: Database Username
+          type: string
+          description: Username for database access
+          default: appuser
+          pattern: '^[a-z][a-z0-9_]*$'
+          ui:options:
+            condition:
+              properties:
+                setupDatabase:
+                  const: true
 
   steps:
     - id: template
@@ -63,74 +188,57 @@ spec:
           description: ${{ parameters.description }}
           destination: ${{ parameters.repoUrl | parseRepoUrl }}
           owner: ${{ parameters.owner }}
-          repoHost: ${{ parameters.repoUrl | parseRepoUrl | pick('host') | replace('github.com', 'github') | replace('bitbucket.org', 'bitbucket') }}
+          project_id: ${{ parameters.project_id }}
+          region: ${{ parameters.region }}
+          cloudProvider: ${{ parameters.cloudProvider }}
+          deploymentType: ${{ parameters.deploymentType }}
+          gkeClusterName: ${{ parameters.gkeClusterName }}
+          gkeRegion: ${{ parameters.gkeRegion }}
+          gkeNamespace: ${{ parameters.gkeNamespace }}
+          setupDatabase: ${{ parameters.setupDatabase }}
+          databaseType: ${{ parameters.databaseType }}
+          dbName: ${{ parameters.dbName }}
+          dbUser: ${{ parameters.dbUser }}
 
     - id: setup-github-workflows
       name: Setup GitHub Workflows
-      if: ${{ (parameters.repoUrl | parseRepoUrl).host === 'github.com' }}
       action: fetch:template
       input:
-        url: ./skeleton/ci-cd/github
-        targetPath: .github
+        url: ./skeleton/ci-cd/github/workflows
+        targetPath: .github/workflows
         values:
           component_id: ${{ parameters.component_id }}
-          description: ${{ parameters.description }}
-          destination: ${{ parameters.repoUrl | parseRepoUrl }}
-          owner: ${{ parameters.owner }}
-
-    - id: setup-bitbucket-pipelines
-      name: Setup Bitbucket Pipelines
-      if: ${{ (parameters.repoUrl | parseRepoUrl).host === 'bitbucket.org' }}
-      action: fetch:template
-      input:
-        url: ./skeleton/ci-cd/bitbucket
-        targetPath: .
-        values:
-          component_id: ${{ parameters.component_id }}
-          description: ${{ parameters.description }}
-          destination: ${{ parameters.repoUrl | parseRepoUrl }}
-          owner: ${{ parameters.owner }}
+          project_id: ${{ parameters.project_id }}
+          region: ${{ parameters.region }}
+          deploymentType: ${{ parameters.deploymentType }}
+          gkeClusterName: ${{ parameters.gkeClusterName }}
+          gkeRegion: ${{ parameters.gkeRegion }}
+          gkeNamespace: ${{ parameters.gkeNamespace }}
+          setupDatabase: ${{ parameters.setupDatabase }}
+          databaseType: ${{ parameters.databaseType }}
+          dbName: ${{ parameters.dbName }}
+          dbUser: ${{ parameters.dbUser }}
 
     - id: publish-github
       name: Publish to GitHub
-      if: ${{ (parameters.repoUrl | parseRepoUrl).host === 'github.com' }}
       action: publish:github
       input:
         description: This is ${{ parameters.component_id }}
         repoUrl: ${{ parameters.repoUrl }}
-        defaultBranch: dev
-        repoVisibility: public
-
-    - id: publish-bitbucket
-      name: Publish to Bitbucket Cloud
-      if: ${{ (parameters.repoUrl | parseRepoUrl).host === 'bitbucket.org' }}
-      action: publish:bitbucketCloud
-      input:
-        description: This is ${{ parameters.component_id }}
-        repoUrl: ${{ parameters.repoUrl }}
-        defaultBranch: dev
+        defaultBranch: main
         repoVisibility: public
 
     - id: register-github
       name: Register in Catalog (GitHub)
-      if: ${{ (parameters.repoUrl | parseRepoUrl).host === 'github.com' }}
       action: catalog:register
       input:
         repoContentsUrl: ${{ steps['publish-github'].output.repoContentsUrl }}
         catalogInfoPath: '/catalog-info.yaml'
 
-    - id: register-bitbucket
-      name: Register in Catalog (Bitbucket)
-      if: ${{ (parameters.repoUrl | parseRepoUrl).host === 'bitbucket.org' }}
-      action: catalog:register
-      input:
-        repoContentsUrl: ${{ steps['publish-bitbucket'].output.repoContentsUrl }}
-        catalogInfoPath: '/catalog-info.yaml'
-
   output:
     links:
       - title: Repository
-        url: ${{ (parameters.repoUrl | parseRepoUrl).host === 'github.com' and steps['publish-github'].output.remoteUrl or 'https://bitbucket.org/zensaridp/' + parameters.component_id }}
+        url: ${{ steps['publish-github'].output.remoteUrl }}
       - title: Open in catalog
         icon: catalog
         entityRef: component:default/${{ parameters.component_id }}

@@ -2,102 +2,198 @@
 
 ${{ values.description }}
 
-## 🏠 Repository Host
-
-This service is hosted on **{%- if values.repoHost == 'github' %}GitHub{%- elif values.repoHost == 'bitbucket' %}Bitbucket{%- endif %}**.
-
-{%- if values.repoHost == 'github' %}
-🔗 **Repository**: [https://github.com/${{ values.destination.owner }}/${{ values.destination.repo }}](https://github.com/${{ values.destination.owner }}/${{ values.destination.repo }})
-{%- elif values.repoHost == 'bitbucket' %}
-🔗 **Repository**: [https://bitbucket.org/${{ values.destination.owner }}/${{ values.destination.repo }}](https://bitbucket.org/${{ values.destination.owner }}/${{ values.destination.repo }})
-{%- endif %}
-
 ## 🚀 Quick Start
 
+### Prerequisites
+- Node.js 18+ 
+- Docker
+- Google Cloud CLI (if deploying to GCP)
+{% if values.deploymentType === 'gke' %}- kubectl (for GKE deployments){% endif %}
+{% if values.provisionInfra %}- Terraform (for infrastructure provisioning){% endif %}
+
 ### Local Development
-```bash
-# Install dependencies
-npm install
 
-# Start development server
-npm run dev
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
-# Run tests
-npm test
+2. **Set up environment variables:**
+   ```bash
+   # Copy the appropriate environment file
+   npm run env:dev  # or env:staging, env:prod
+   ```
+
+3. **Start the development server:**
+   ```bash
+   npm run dev
+   ```
+
+4. **Run tests:**
+   ```bash
+   npm test
+   ```
+
+The service will be available at `http://localhost:3001`
+
+### 🔧 Configuration
+
+This service is configured for:
+- **Cloud Provider:** ${{ values.cloudProvider | upper }}
+- **Deployment Type:** ${{ values.deploymentType | upper }}
+{% if values.deploymentType === 'gke' %}- **GKE Cluster:** ${{ values.gkeClusterName }}
+- **GKE Region:** ${{ values.gkeRegion }}
+- **GKE Namespace:** ${{ values.gkeNamespace }}{% endif %}
+{% if values.provisionInfra %}- **Infrastructure:** Automated provisioning enabled
+{% if values.infraDatabase !== 'none' %}  - Database: ${{ values.infraDatabase | upper }}{% endif %}
+{% if values.infraStorage %}  - Storage: Cloud Storage bucket{% endif %}{% endif %}
+
+### 📁 Project Structure
+
+```
+${{ values.component_id }}/
+├── index.js                 # Main application file (REPLACE WITH YOUR CODE)
+├── package.json             # Dependencies and scripts
+├── Dockerfile              # Container configuration
+├── .github/workflows/       # CI/CD pipelines
+│   └── ci-cd.yml           # Main deployment workflow
+{% if values.provisionInfra %}│   └── infrastructure.yml   # Infrastructure provisioning
+├── infrastructure/         # Terraform configuration
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── resources.tf
+│   └── outputs.tf{% endif %}
+{% if values.deploymentType === 'gke' %}├── k8s/                    # Kubernetes manifests
+│   ├── deployment.yaml
+│   └── service.yaml{% endif %}
+├── deploy/                 # Deployment scripts
+└── .env.*                  # Environment configurations
 ```
 
-### Docker Development
+### 🔄 Replacing Boilerplate Code
+
+The `index.js` file contains a basic Express.js setup. To replace it with your own application:
+
+1. **Keep the health check endpoint** - Required for cloud deployments:
+   ```javascript
+   app.get('/health', (req, res) => {
+     res.json({ status: 'healthy' });
+   });
+   ```
+
+2. **Replace the section between the markers:**
+   ```javascript
+   // ========================================
+   // YOUR APPLICATION CODE STARTS HERE
+   // ========================================
+   
+   // Replace everything between these markers with your code
+   
+   // ========================================
+   // YOUR APPLICATION CODE ENDS HERE
+   // ========================================
+   ```
+
+3. **Keep the error handling and server startup code** at the bottom of the file.
+
+### 🚀 Deployment
+
+#### Automatic Deployment (Recommended)
+The service deploys automatically via GitHub Actions:
+
+- **Push to `dev`** → Deploys to development environment
+- **Push to `staging`** → Deploys to staging environment  
+- **Push to `main`** → Deploys to production environment
+
+#### Required GitHub Secrets
+
+Set these in your GitHub repository settings:
+
+**Authentication:**
+- `GCP_SA_KEY` - Service account key (JSON)
+- Or environment-specific: `GCP_SA_KEY_DEV`, `GCP_SA_KEY_STAGING`, `GCP_SA_KEY_PROD`
+
+**Project IDs:**
+- `GCP_PROJECT_ID` - Default project ID
+- Or environment-specific: `GCP_PROJECT_ID_DEV`, `GCP_PROJECT_ID_STAGING`, `GCP_PROJECT_ID_PROD`
+
+{% if values.provisionInfra %}### 🏗️ Infrastructure Provisioning
+
+Infrastructure is automatically provisioned using Terraform:
+
+{% if values.infraDatabase !== 'none' %}**Database:** ${{ values.infraDatabase | upper }} Cloud SQL instance
+- Automatically creates database and user
+- Outputs connection details{% endif %}
+
+{% if values.infraStorage %}**Storage:** Google Cloud Storage bucket
+- Versioning enabled
+- IAM permissions configured{% endif %}
+
+**To provision infrastructure manually:**
 ```bash
-# Build Docker image
+npm run infra:init
+npm run infra:plan
+npm run infra:apply
+```
+
+**Infrastructure deployment:**
+- Triggers automatically on pushes to `main`
+- Can be manually triggered via GitHub Actions
+- Uses separate Terraform state per environment{% endif %}
+
+### 🐳 Docker
+
+**Build the image:**
+```bash
 npm run docker:build
+```
 
-# Run in container
+**Run locally:**
+```bash
 npm run docker:run
+```
 
-# Stop container
+**Stop container:**
+```bash
 npm run docker:stop
 ```
 
-## 🔄 CI/CD Configuration
+### 🔍 Monitoring
 
-This repository includes a well-organized CI/CD setup that automatically deploys the appropriate configuration based on your chosen repository platform.
+**Health Check:**
+- Endpoint: `/health`
+- Returns service status and metadata
 
-### 📂 CI/CD Organization
+**Logs:**
+{% if values.deploymentType === 'cloudrun' %}- Cloud Run: `gcloud logs read --service=${{ values.component_id }}`
+{% else %}- GKE: `kubectl logs -l app=${{ values.component_id }} -n ${{ values.gkeNamespace }}`{% endif %}
 
-The template source maintains separate, organized CI/CD configurations:
+### 📚 API Documentation
 
-```
-ci-cd/
-├── github/              # GitHub Actions workflows
-│   ├── workflows/       # GitHub workflow files  
-│   └── README.md       # GitHub-specific setup guide
-└── bitbucket/          # Bitbucket Pipelines
-    ├── bitbucket-pipelines.yml # Bitbucket configuration
-    └── README.md       # Bitbucket-specific setup guide
-```
+Once you replace the boilerplate code, document your API endpoints here:
 
-### 🚀 Deployed Configuration
+- `GET /` - Welcome endpoint
+- `GET /health` - Health check
+- `GET /api/example` - Example endpoint (replace with your endpoints)
 
-{%- if values.repoHost == 'github' %}
-Your repository is hosted on **GitHub**, so **GitHub Actions** has been deployed:
-- ✅ **Active**: `.github/workflows/` - GitHub Actions CI/CD pipelines
-- 📖 **Documentation**: Platform-specific setup instructions included
-- 🔧 **Setup Required**: Configure GitHub Secrets for GCP deployment
+### 🤝 Contributing
 
-**GitHub Actions Features:**
-- Comprehensive CI/CD with testing and deployment
-- Multi-environment support (dev, staging, production)
-- Automatic branch setup and protection
-- GCP Cloud Run deployment integration
+1. Create a feature branch
+2. Make your changes
+3. Test locally
+4. Push to trigger CI/CD
+5. Create a pull request
 
-{%- elif values.repoHost == 'bitbucket' %}
-Your repository is hosted on **Bitbucket**, so **Bitbucket Pipelines** has been deployed:
-- ✅ **Active**: `bitbucket-pipelines.yml` - Bitbucket Pipelines configuration
-- 📖 **Documentation**: Platform-specific setup instructions included  
-- 🔧 **Setup Required**: Configure Bitbucket Repository Variables for GCP deployment
+### 📧 Support
 
-**Bitbucket Pipelines Features:**
-- Complete CI/CD with testing and deployment
-- Docker-based builds and testing
-- Environment-specific deployments (development, staging, production)
-- Manual production deployments for safety
-{%- endif %}
+For questions or issues:
+- Check the logs in Google Cloud Console
+- Review GitHub Actions workflow runs
+- Contact: ${{ values.owner }}
 
-### 🎯 Clean Repository Structure
+---
 
-Only the relevant CI/CD configuration for your chosen platform is deployed, ensuring:
-- **No Clutter**: Only active CI/CD files in your repository
-- **Platform-Optimized**: Configuration tailored for your chosen platform
-- **Clear Documentation**: Platform-specific setup guides included
-
-## 🌍 Environment Management
-
-This service supports three environments with separate configurations and deployments:
-
-### Environments
-
-| Environment | Branch    | Auto-Deploy | Purpose           |
-|------------|-----------|-------------|-------------------|
+**Generated by Backstage IDP** - ${{ values.component_id }}
 | Development| `dev` (default) | ✅ Yes      | Feature development and testing |
 | Staging    | `staging` | ✅ Yes      | Pre-production testing |
 | Production | `main`    | ✅ Yes      | Live production services |

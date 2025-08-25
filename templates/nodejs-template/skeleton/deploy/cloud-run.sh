@@ -5,9 +5,10 @@ set -e
 
 # Configuration
 SERVICE_NAME="${{ values.component_id }}"
-PROJECT_ID="${GCP_PROJECT_ID:-your-gcp-project}"
-REGION="${GCP_REGION:-us-central1}"
+PROJECT_ID="${GCP_PROJECT_ID:-${{ values.project_id }}}"
+REGION="${GCP_REGION:-${{ values.region }}}"
 IMAGE_TAG="${1:-latest}"
+ARTIFACT_REGISTRY_URL="$REGION-docker.pkg.dev/$PROJECT_ID/$SERVICE_NAME"
 
 echo "🚀 Deploying $SERVICE_NAME to Google Cloud Run..."
 
@@ -24,19 +25,19 @@ gcloud config set project $PROJECT_ID
 
 # Build and push Docker image
 echo "📦 Building Docker image..."
-docker build -t gcr.io/$PROJECT_ID/$SERVICE_NAME:$IMAGE_TAG .
+docker build -t $ARTIFACT_REGISTRY_URL/$SERVICE_NAME:$IMAGE_TAG .
 
-echo "📤 Pushing to Google Container Registry..."
-docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:$IMAGE_TAG
+echo "📤 Pushing to Artifact Registry..."
+docker push $ARTIFACT_REGISTRY_URL/$SERVICE_NAME:$IMAGE_TAG
 
 # Deploy to Cloud Run
 echo "☁️ Deploying to Cloud Run..."
 gcloud run deploy $SERVICE_NAME \
-  --image gcr.io/$PROJECT_ID/$SERVICE_NAME:$IMAGE_TAG \
+  --image $ARTIFACT_REGISTRY_URL/$SERVICE_NAME:$IMAGE_TAG \
   --platform managed \
   --region $REGION \
   --allow-unauthenticated \
-  --port 3001 \
+  --port 3000 \
   --memory 512Mi \
   --cpu 1 \
   --max-instances 10 \

@@ -102,18 +102,6 @@ catalog:
       rules:
         - allow: [Template]
 
-    # ASP.NET Web API template
-    - type: file
-      target: ../../templates/aspnet-webapi-template/template.yaml
-      rules:
-        - allow: [Template]
-
-    # ASP.NET Web App template
-    - type: file
-      target: ../../templates/aspnet-webapp-template/template.yaml
-      rules:
-        - allow: [Template]
-
     # Local example organizational data
     - type: file
       target: ../../examples/org.yaml
