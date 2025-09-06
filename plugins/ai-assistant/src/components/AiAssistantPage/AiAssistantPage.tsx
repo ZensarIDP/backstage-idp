@@ -4,7 +4,6 @@ import {
   Page,
   Header,
   Content,
-  HeaderLabel,
   SupportButton,
 } from '@backstage/core-components';
 import { useApi, configApiRef, githubAuthApiRef } from '@backstage/core-plugin-api';
@@ -16,7 +15,6 @@ import {
 } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
 import {
-  Code as CodeIcon,
   FolderOpen as ExplorerIcon,
   Chat as ChatIcon,
   AccountTree as WorkspaceIcon,
@@ -116,6 +114,8 @@ const useStyles = makeStyles(() => ({
     flexDirection: 'column',
     height: '100%',
     overflow: 'hidden',
+    minWidth: 0, // Important for flex children to shrink properly
+    maxWidth: '100%',
   },
   aiChat: {
     width: '360px',
@@ -129,7 +129,7 @@ const useStyles = makeStyles(() => ({
   chatHistory: {
     flex: 1,
     overflowY: 'auto',
-    padding: '8px 0',
+    padding: '0 0 8px 0',
     height: '100%', // Fill available space
   },
   chatInput: {
@@ -184,6 +184,9 @@ const useStyles = makeStyles(() => ({
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: 0, // Important for flex children to shrink properly
   },
   explorerBody: {
     display: 'flex',
@@ -356,7 +359,7 @@ export const AiAssistantPage = () => {
   const [repositoriesLoading, setRepositoriesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [aiGeneratedFiles, setAiGeneratedFiles] = useState<Array<{ path: string; content: string; isNew: boolean }>>([]);
+  const [aiGeneratedFiles, setAiGeneratedFiles] = useState<Array<{ path: string; content: string; isNew: boolean; originalContent?: string }>>([]);
   // const [pendingAIFile, setPendingAIFile] = useState<{ content: string; name: string } | null>(null); // Commented out - not used currently
   // const [showDirectoryPicker, setShowDirectoryPicker] = useState(false); // Commented out - not used currently
   // const [repoDirectories, setRepoDirectories] = useState<string[]>([]); // Commented out - not used
@@ -631,20 +634,39 @@ export const AiAssistantPage = () => {
   const handleChatResponse = (response: any) => {
     // Add AI-generated files to the workspace
     if (response.files && response.files.length > 0) {
-      const newFiles = response.files.map((file: any) => ({
-        path: file.path,
-        content: file.content,
-        isNew: !existingFiles.some(ef => ef.path === file.path)
-      }));
+      const newFiles = response.files.map((file: any) => {
+        const isExistingFile = existingFiles.some(ef => ef.path === file.path);
+        return {
+          path: file.path,
+          content: file.content,
+          isNew: !isExistingFile,
+          // Store original content for diff comparison
+          originalContent: isExistingFile 
+            ? existingFiles.find(ef => ef.path === file.path)?.content || ''
+            : ''
+        };
+      });
       
       setAiGeneratedFiles(prev => {
         const fileMap = new Map();
+        // Preserve existing files but update with new AI content
         prev.forEach(f => fileMap.set(f.path, f));
-        newFiles.forEach((f: any) => fileMap.set(f.path, f));
-  const merged = Array.from(fileMap.values());
-  // Auto-select all AI files for PR by default
-  setSelectedAIPaths(new Set(merged.map(f => f.path)));
-  return merged;
+        newFiles.forEach((f: any) => {
+          const existingAIFile = fileMap.get(f.path);
+          fileMap.set(f.path, {
+            ...f,
+            // Preserve original content if it exists from previous AI generations
+            originalContent: existingAIFile?.originalContent || f.originalContent
+          });
+        });
+        const merged = Array.from(fileMap.values());
+        // Auto-select only new AI files for PR, preserve existing selections
+        setSelectedAIPaths(prev => {
+          const newPaths = new Set(prev);
+          newFiles.forEach((f: any) => newPaths.add(f.path));
+          return newPaths;
+        });
+        return merged;
       });
     }
   };
@@ -652,6 +674,13 @@ export const AiAssistantPage = () => {
   const handleFilesGenerated = (files: any[], request: any) => {
     // Legacy support for existing functionality - could be removed if not needed
     console.log('Files generated:', files.length, 'Request:', request);
+  };
+
+  const handleOpenFileFromChat = (filePath: string) => {
+    // Open file in workspace from chat interface
+    if (workspaceRef.current) {
+      workspaceRef.current.openFile(filePath);
+    }
   };
 
   const handleCreatePR = async (selectedFiles: FileState[]) => {
@@ -1143,10 +1172,10 @@ export const AiAssistantPage = () => {
   const handleDirectorySelect = (dir: string): void => {
     if (pendingAIFile) {
       const newPath = dir === '/' ? pendingAIFile.name : `${dir}/${pendingAIFile.name}`;
-      setAiGeneratedFiles((prev: Array<{ path: string; content: string; isNew: boolean }>) => {
-        const fileMap = new Map<string, { path: string; content: string; isNew: boolean }>();
+      setAiGeneratedFiles((prev: Array<{ path: string; content: string; isNew: boolean; originalContent?: string }>) => {
+        const fileMap = new Map<string, { path: string; content: string; isNew: boolean; originalContent?: string }>();
         prev.forEach((f) => fileMap.set(f.path, f));
-        fileMap.set(newPath, { path: newPath, content: pendingAIFile.content, isNew: true });
+        fileMap.set(newPath, { path: newPath, content: pendingAIFile.content, isNew: true, originalContent: '' });
         const merged = Array.from(fileMap.values());
         setSelectedAIPaths(new Set(merged.map((f) => f.path)));
         return merged;
@@ -1166,8 +1195,8 @@ export const AiAssistantPage = () => {
   />
   */}
   return (
-    <Page themeId="tool" className={classes.root}>
-      <Header title="ZenOps AI" subtitle="AI-powered development assistance for your Backstage projects">
+    <Page themeId="home" className={classes.root}>
+      <Header title="ZenOps AI">
         <SupportButton>
           Get AI-powered help with generating configuration files, CI/CD pipelines, and infrastructure code.
         </SupportButton>
@@ -1231,19 +1260,24 @@ export const AiAssistantPage = () => {
                   
                   {/* Staged Changes Section - Equal Space */}
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                    <div className={classes.sectionSubheader}>Staged Changes ({Array.from(new Set([
-                      ...Array.from(selectedAIPaths),
-                      ...Array.from(manuallyEditedFiles.keys())
-                    ])).length})</div>
+                    <div className={classes.sectionSubheader}>
+                      Staged Changes ({Array.from(new Set([
+                        ...aiGeneratedFiles.map(f => f.path),
+                        ...Array.from(manuallyEditedFiles.keys())
+                      ])).length})
+                      <div style={{ fontSize: 11, color: '#969696', fontWeight: 'normal', marginTop: '2px' }}>
+                        Check files to include in PR
+                      </div>
+                    </div>
                     <div className={classes.stagedFilesScrollable}>
                       {Array.from(new Set([
-                        ...Array.from(selectedAIPaths),
+                        ...aiGeneratedFiles.map(f => f.path),
                         ...Array.from(manuallyEditedFiles.keys())
                       ])).length === 0 ? (
                         <div className={classes.emptyState}>No staged files yet</div>
                       ) : (
                         Array.from(new Set([
-                          ...Array.from(selectedAIPaths),
+                          ...aiGeneratedFiles.map(f => f.path),
                           ...Array.from(manuallyEditedFiles.keys())
                         ])).map((path, idx) => {
                           // Find file details from AI or manual
@@ -1269,11 +1303,15 @@ export const AiAssistantPage = () => {
                           }
                           return (
                             <div key={idx} className={classes.fileItem}>
-                              <div style={{ display: 'flex', alignItems: 'center' }}>
+                              <div 
+                                style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+                                onClick={() => workspaceRef.current?.openDiffView?.(path)}
+                              >
                                 <input
                                   type="checkbox"
                                   className={classes.checkbox}
                                   checked={isSelected}
+                                  onClick={(e) => e.stopPropagation()} // Prevent triggering diff view
                                   onChange={(e) => {
                                     if (aiFile) {
                                       setSelectedAIPaths(prev => {
@@ -1299,7 +1337,13 @@ export const AiAssistantPage = () => {
                                   </span>
                                 </div>
                               </div>
-                              <div className={classes.filePath}>{path}</div>
+                              <div 
+                                className={classes.filePath}
+                                style={{ cursor: 'pointer' }}
+                                onClick={() => workspaceRef.current?.openDiffView?.(path)}
+                              >
+                                {path}
+                              </div>
                             </div>
                           );
                         })
@@ -1396,18 +1440,28 @@ export const AiAssistantPage = () => {
                   </div>
                 </div>
               ) : (
-                <FileWorkspaceManager
-                  ref={workspaceRef}
-                  repository={selectedRepo?.entity}
-                  existingFiles={existingFiles}
-                  aiGeneratedFiles={aiGeneratedFiles}
-                  onCreatePR={handleCreatePR}
-                  onRequestAIEdit={handleAIEdit}
-                  onFileSave={handleFileSave}
-                  githubToken={effectiveGithubToken}
-                  hideSidebar
-                  hideToolbar
-                />
+                <div style={{ 
+                  flex: 1, 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  overflow: 'hidden',
+                  width: '100%',
+                  maxWidth: '100%',
+                  minWidth: 0
+                }}>
+                  <FileWorkspaceManager
+                    ref={workspaceRef}
+                    repository={selectedRepo?.entity}
+                    existingFiles={existingFiles}
+                    aiGeneratedFiles={aiGeneratedFiles}
+                    onCreatePR={handleCreatePR}
+                    onRequestAIEdit={handleAIEdit}
+                    onFileSave={handleFileSave}
+                    githubToken={effectiveGithubToken}
+                    hideSidebar
+                    hideToolbar
+                  />
+                </div>
               )}
             </div>
           </div>
@@ -1427,6 +1481,7 @@ export const AiAssistantPage = () => {
                       existingFiles={existingFiles}
                       onResponse={handleChatResponse}
                       onFilesGenerated={handleFilesGenerated}
+                      onOpenFile={handleOpenFileFromChat}
                     />
                   </div>
                 </>

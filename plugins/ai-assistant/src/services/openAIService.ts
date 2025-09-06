@@ -173,7 +173,7 @@ Always respond in JSON format:
     return prompt;
   }
 
-  private parseAIResponse(response: string, _request: AIRequest): AIResponse {
+  private parseAIResponse(response: string, request: AIRequest): AIResponse {
     try {
       // Try to parse as JSON first
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -190,7 +190,7 @@ Always respond in JSON format:
     }
 
     // Fallback: Try to extract code blocks
-    const codeBlocks = this.extractCodeBlocks(response);
+    const codeBlocks = this.extractCodeBlocks(response, request.existingFiles);
     if (codeBlocks.length > 0) {
       // Extract the explanatory text (everything before the first FILE_START)
       const fileStartIndex = response.indexOf('FILE_START:');
@@ -217,7 +217,7 @@ Always respond in JSON format:
     };
   }
 
-  private extractCodeBlocks(response: string): Array<{path: string, content: string, isNew: boolean}> {
+  private extractCodeBlocks(response: string, existingFiles: Array<{path: string, type: string, content?: string}> = []): Array<{path: string, content: string, isNew: boolean}> {
     const files: Array<{path: string, content: string, isNew: boolean}> = [];
     
     // First try to extract FILE_START/FILE_END blocks
@@ -225,10 +225,12 @@ Always respond in JSON format:
     let match;
     while ((match = fileBlockRegex.exec(response)) !== null) {
       const [, path, , content] = match;
+      const trimmedPath = path.trim();
+      const isExistingFile = existingFiles.some(ef => ef.path === trimmedPath);
       files.push({
-        path: path.trim(),
+        path: trimmedPath,
         content: content.trim(),
-        isNew: true,
+        isNew: !isExistingFile,
       });
     }
     
@@ -241,11 +243,12 @@ Always respond in JSON format:
         
         // Try to determine file path from context
         let path = possiblePath || this.guessFilePathFromContent(content, language);
+        const isExistingFile = existingFiles.some(ef => ef.path === path);
         
         files.push({
           path: path,
           content: content.trim(),
-          isNew: true,
+          isNew: !isExistingFile,
         });
       }
     }

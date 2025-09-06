@@ -10,6 +10,10 @@ import {
   Send as SendIcon,
   Refresh as RegenerateIcon,
   BubbleChart as ZenOpsAiIcon,
+  Check as CreatedIcon,
+  Settings as ModifyIcon,
+  InsertDriveFile as FileIcon,
+  FolderOpen as OpenIcon,
 } from '@material-ui/icons';
 import { OpenAIService } from '../../services/openAIService';
 
@@ -235,6 +239,61 @@ const useStyles = makeStyles(() => ({
     textAlign: 'right',
     fontWeight: 500,
   },
+  fileSummary: {
+    marginTop: 8,
+    padding: '6px 0',
+    borderTop: '1px solid #2d2d30',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+  },
+  fileItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '3px 6px',
+    borderRadius: 3,
+    backgroundColor: '#2d2d30',
+    fontSize: '11px',
+    color: '#cccccc',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    border: '1px solid transparent',
+    '&:hover': {
+      backgroundColor: '#3e3e42',
+      borderColor: '#007acc',
+      '& $fileName': {
+        color: '#58a6ff',
+      },
+    },
+  },
+  fileTag: {
+    padding: '1px 4px',
+    borderRadius: 2,
+    fontSize: '9px',
+    fontWeight: 600,
+    textTransform: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 2,
+    letterSpacing: '0.3px',
+    backgroundColor: 'transparent',
+  },
+  createdTag: {
+    color: '#7d8590',
+  },
+  modifiedTag: {
+    color: '#7d8590',
+  },
+  fileName: {
+    flex: 1,
+    fontFamily: '"Fira Code", "Consolas", "Monaco", monospace',
+    fontSize: '11px',
+    color: '#e6edf3',
+    display: 'flex',
+    alignItems: 'center',
+    transition: 'color 0.2s ease',
+  },
 }));
 
 interface Message {
@@ -243,6 +302,12 @@ interface Message {
   sender: 'user' | 'ai';
   timestamp: Date;
   thinking?: boolean;
+  files?: Array<{
+    path: string;
+    content: string;
+    isNew: boolean;
+    originalContent?: string;
+  }>;
 }
 
 interface ChatInterfaceProps {
@@ -251,6 +316,7 @@ interface ChatInterfaceProps {
   existingFiles: any[];
   onResponse: (response: any) => void;
   onFilesGenerated?: (files: any[], request: any) => void;
+  onOpenFile?: (filePath: string) => void;
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -259,6 +325,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   existingFiles,
   onResponse,
   onFilesGenerated,
+  onOpenFile,
 }) => {
   const classes = useStyles();
   const configApi = useApi(configApiRef);
@@ -291,10 +358,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     let match;
     while ((match = fileBlockRegex.exec(response)) !== null) {
       const [, path, , content] = match;
+      const trimmedPath = path.trim();
+      const isExistingFile = existingFiles.some(ef => ef.path === trimmedPath);
       files.push({
-        path: path.trim(),
+        path: trimmedPath,
         content: content.trim(),
-        isNew: true,
+        isNew: !isExistingFile,
       });
     }
     
@@ -307,11 +376,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         
         // Try to determine file path from context
         let path = possiblePath || guessFilePathFromContent(content, language);
+        const isExistingFile = existingFiles.some(ef => ef.path === path);
         
         files.push({
           path: path,
           content: content.trim(),
-          isNew: true,
+          isNew: !isExistingFile,
         });
       }
     }
@@ -357,6 +427,52 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       case 'typescript': case 'ts': return 'index.ts';
       default: return 'generated-file.txt';
     }
+  };
+
+  // Helper function to render file summary
+  const renderFileSummary = (files: Array<{path: string, content: string, isNew: boolean, originalContent?: string}>) => {
+    if (!files || files.length === 0) return null;
+
+    return (
+      <div className={classes.fileSummary}>
+        {files.map((file, index) => {
+          const isNewFile = file.isNew;
+          
+          // Extract just the file name from the path
+          const fileName = file.path.split('/').pop() || file.path;
+
+          return (
+            <div 
+              key={index} 
+              className={classes.fileItem}
+              onClick={() => onOpenFile?.(file.path)}
+              title={`Click to open ${file.path}`}
+            >
+              <div className={`${classes.fileTag} ${isNewFile ? classes.createdTag : classes.modifiedTag}`}>
+                {isNewFile ? (
+                  <>
+                    <CreatedIcon style={{ fontSize: 10 }} />
+                    Created
+                  </>
+                ) : (
+                  <>
+                    <ModifyIcon style={{ fontSize: 10 }} />
+                    Modified
+                  </>
+                )}
+              </div>
+              
+              <div className={classes.fileName}>
+                <FileIcon style={{ fontSize: 12, color: '#7d8590', marginRight: 4 }} />
+                {fileName}
+              </div>
+              
+              <OpenIcon style={{ fontSize: 12, color: '#7d8590' }} />
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   const scrollToBottom = () => {
@@ -473,6 +589,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         content: typeof response.message === 'string' ? response.message : (response as any).message || 'Response received',
         sender: 'ai',
         timestamp: new Date(),
+        files: response.files || [],
       };
 
       // Replace thinking message with actual response
@@ -590,6 +707,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <span></span>
                   </div>
                 </div>
+              )}
+              
+              {/* File Summary for AI responses with files */}
+              {message.sender === 'ai' && !message.thinking && message.files && message.files.length > 0 && (
+                renderFileSummary(message.files)
               )}
               
               {/* Message actions for AI responses */}

@@ -88,6 +88,10 @@ const useStyles = makeStyles(() => ({
     display: 'flex',
     flexDirection: 'column',
     backgroundColor: '#1e1e1e',
+    width: '100%',
+    maxWidth: '100%',
+    overflow: 'hidden',
+    minWidth: 0, // Important for flex children to shrink properly
   },
   tabsContainer: {
     backgroundColor: '#252526',
@@ -330,12 +334,27 @@ const useStyles = makeStyles(() => ({
     borderRight: '1px solid #2d2d30',
     zIndex: 1,
   },
-  // Enhanced tab styling
+  // Enhanced tab styling with proper overflow handling
   enhancedTabsContainer: {
+    width: '100%',
+    maxWidth: '100%',
+    overflow: 'hidden',
+    backgroundColor: '#252526',
+    borderBottom: '1px solid #2d2d30',
     '& .MuiTabs-root': {
       minHeight: 35,
+      maxWidth: '100%',
+      '& .MuiTabs-flexContainer': {
+        maxWidth: '100%',
+      },
+      '& .MuiTabs-scroller': {
+        maxWidth: '100%',
+        overflow: 'hidden',
+      },
       '& .MuiTab-root': {
         minHeight: 35,
+        minWidth: 80,
+        maxWidth: 180,
         padding: '6px 12px',
         fontSize: '13px',
         fontWeight: 400,
@@ -345,6 +364,9 @@ const useStyles = makeStyles(() => ({
         border: '1px solid #2d2d30',
         borderBottom: 'none',
         marginRight: 1,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
         '&:hover': {
           backgroundColor: '#383838',
           color: '#ffffff',
@@ -353,6 +375,17 @@ const useStyles = makeStyles(() => ({
           backgroundColor: '#1e1e1e',
           color: '#ffffff',
           borderColor: '#007acc',
+        },
+      },
+      '& .MuiTabs-scrollButtons': {
+        color: '#969696',
+        backgroundColor: '#252526',
+        width: 32,
+        '&:hover': {
+          backgroundColor: '#37373d',
+        },
+        '&.Mui-disabled': {
+          color: '#3c3c3c',
         },
       },
     },
@@ -414,6 +447,126 @@ const useStyles = makeStyles(() => ({
       color: '#2196f3',
     },
   },
+  // Modern Unified Diff view styles
+  unifiedDiffContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%',
+    fontFamily: '"Fira Code", "Consolas", "Monaco", monospace',
+    fontSize: '14px',
+    backgroundColor: '#1e1e1e',
+    overflow: 'hidden',
+  },
+  unifiedDiffContent: {
+    flex: 1,
+    overflow: 'auto',
+    backgroundColor: '#1e1e1e',
+    '&::-webkit-scrollbar': {
+      width: 12,
+      height: 12,
+    },
+    '&::-webkit-scrollbar-track': {
+      backgroundColor: '#1e1e1e',
+    },
+    '&::-webkit-scrollbar-thumb': {
+      backgroundColor: '#424242',
+      borderRadius: 6,
+      '&:hover': {
+        backgroundColor: '#565656',
+      },
+    },
+  },
+  unifiedDiffLine: {
+    display: 'flex',
+    minHeight: '20px',
+    lineHeight: '20px',
+    fontFamily: 'inherit',
+    fontSize: 'inherit',
+    margin: 0,
+    padding: 0,
+    width: '100%',
+    '&:hover': {
+      backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    },
+  },
+  diffLineNumbers: {
+    display: 'flex',
+    backgroundColor: '#252526',
+    borderRight: '1px solid #2d2d30',
+    flexShrink: 0,
+    userSelect: 'none',
+  },
+  oldLineNumber: {
+    color: '#858585',
+    fontSize: '12px',
+    width: '50px',
+    textAlign: 'right',
+    paddingRight: '8px',
+    paddingLeft: '4px',
+  },
+  newLineNumber: {
+    color: '#858585',
+    fontSize: '12px',
+    width: '50px',
+    textAlign: 'right',
+    paddingRight: '8px',
+    paddingLeft: '4px',
+    borderLeft: '1px solid #2d2d30',
+  },
+  linePrefix: {
+    width: '20px',
+    textAlign: 'center',
+    fontWeight: 'bold',
+    flexShrink: 0,
+    userSelect: 'none',
+  },
+  lineContent: {
+    flex: 1,
+    paddingLeft: '12px',
+    paddingRight: '8px',
+    whiteSpace: 'pre',
+    overflow: 'visible',
+    minWidth: 0,
+  },
+  // Line type styles
+  added: {
+    backgroundColor: 'rgba(13, 245, 13, 0.15)',
+    '& $linePrefix': {
+      color: '#03be00ff',
+    },
+    '& $lineContent': {
+      color: '#e6ffed',
+    },
+  },
+  removed: {
+    backgroundColor: 'rgba(243, 83, 75, 0.15)',
+    '& $linePrefix': {
+      color: '#ff0d00ff',
+    },
+    '& $lineContent': {
+      color: '#ffeef0',
+    },
+  },
+  unchanged: {
+    '& $linePrefix': {
+      color: '#858585',
+    },
+    '& $lineContent': {
+      color: '#cccccc',
+    },
+  },
+  diffViewHeader: {
+    padding: '12px 16px',
+    backgroundColor: '#252526',
+    borderBottom: '1px solid #2d2d30',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    '& .MuiButton-root': {
+      textTransform: 'none',
+      fontSize: '13px',
+    },
+  },
 }));
 
 export interface FileState {
@@ -431,7 +584,7 @@ export interface FileState {
 interface FileWorkspaceManagerProps {
   repository?: Entity;
   existingFiles: Array<{ path: string; content?: string; type: string }>;
-  aiGeneratedFiles?: Array<{ path: string; content: string; isNew: boolean }>;
+  aiGeneratedFiles?: Array<{ path: string; content: string; isNew: boolean; originalContent?: string }>;
   onCreatePR: (selectedFiles: FileState[]) => Promise<void>;
   onRequestAIEdit: (filePath: string, content: string, instruction: string) => Promise<string>;
   onFileSave?: (filePath: string, content: string, isNew: boolean) => void;
@@ -442,10 +595,12 @@ interface FileWorkspaceManagerProps {
 
 export type FileWorkspaceManagerHandle = {
   openFile: (path: string) => void;
+  openDiffView: (path: string) => void;
   clearAllModifications?: () => void;
 };
 
 export const FileWorkspaceManager = forwardRef<FileWorkspaceManagerHandle, FileWorkspaceManagerProps>(({ 
+  repository,
   existingFiles,
   aiGeneratedFiles = [],
   onCreatePR,
@@ -462,6 +617,11 @@ export const FileWorkspaceManager = forwardRef<FileWorkspaceManagerHandle, FileW
   const [activeTab, setActiveTab] = useState<string>('');
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [editingContent, setEditingContent] = useState<string>('');
+  const [currentRepository, setCurrentRepository] = useState<Entity | undefined>(repository);
+  
+  // Diff view state
+  const [isDiffView, setIsDiffView] = useState<boolean>(false);
+  const [diffFile, setDiffFile] = useState<string>('');
   
   // UI state
   const [showPRDialog, setShowPRDialog] = useState<boolean>(false);
@@ -489,41 +649,165 @@ export const FileWorkspaceManager = forwardRef<FileWorkspaceManagerHandle, FileW
     return languageMap[ext || ''] || 'text';
   };
 
+  // Diff-related functions
+  const generateDiffLines = (originalContent: string, newContent: string) => {
+    const originalLines = originalContent.split('\n');
+    const newLines = newContent.split('\n');
+    const diffLines: Array<{
+      type: 'added' | 'removed' | 'unchanged';
+      content: string;
+      lineNumber: number;
+      originalLineNumber?: number;
+    }> = [];
+
+    // Simple line-by-line diff (can be enhanced with more sophisticated diff algorithms)
+    const maxLength = Math.max(originalLines.length, newLines.length);
+    let originalIndex = 0;
+    let newIndex = 0;
+
+    for (let i = 0; i < maxLength; i++) {
+      const originalLine = originalLines[originalIndex];
+      const newLine = newLines[newIndex];
+
+      if (originalIndex >= originalLines.length) {
+        // Only new lines remaining
+        diffLines.push({
+          type: 'added',
+          content: newLine || '',
+          lineNumber: newIndex + 1,
+        });
+        newIndex++;
+      } else if (newIndex >= newLines.length) {
+        // Only original lines remaining
+        diffLines.push({
+          type: 'removed',
+          content: originalLine || '',
+          lineNumber: originalIndex + 1,
+          originalLineNumber: originalIndex + 1,
+        });
+        originalIndex++;
+      } else if (originalLine === newLine) {
+        // Lines are the same
+        diffLines.push({
+          type: 'unchanged',
+          content: originalLine || '',
+          lineNumber: newIndex + 1,
+          originalLineNumber: originalIndex + 1,
+        });
+        originalIndex++;
+        newIndex++;
+      } else {
+        // Lines are different - show both as removed and added
+        diffLines.push({
+          type: 'removed',
+          content: originalLine || '',
+          lineNumber: originalIndex + 1,
+          originalLineNumber: originalIndex + 1,
+        });
+        diffLines.push({
+          type: 'added',
+          content: newLine || '',
+          lineNumber: newIndex + 1,
+        });
+        originalIndex++;
+        newIndex++;
+      }
+    }
+
+    return diffLines;
+  };
+
+  const openDiffView = useCallback((filePath: string) => {
+    setDiffFile(filePath);
+    setIsDiffView(true);
+    setIsEditing(false);
+    // Don't add to tabs for diff view, it's a special view
+  }, []);
+
+  const closeDiffView = useCallback(() => {
+    setIsDiffView(false);
+    setDiffFile('');
+  }, []);
+
+  // Close all tabs when repository changes
+  useEffect(() => {
+    if (currentRepository?.metadata?.name !== repository?.metadata?.name) {
+      setOpenTabs([]);
+      setActiveTab('');
+      setIsEditing(false);
+      setEditingContent('');
+      setIsDiffView(false);
+      setDiffFile('');
+      setCurrentRepository(repository);
+    }
+  }, [repository, currentRepository]);
+
   // Initialize workspace with existing and AI-generated files
   useEffect(() => {
-    const fileMap = new Map<string, FileState>();
-    
-    // Add existing files
-    existingFiles.forEach(file => {
-      fileMap.set(file.path, {
-        path: file.path,
-        content: file.content || '',
-        originalContent: file.content || '',
-        isModified: false,
-        isAIGenerated: false,
-        isSelected: false,
-        isNew: false,
-        language: getLanguageFromPath(file.path),
-        lastModified: new Date(),
+    setFiles(prevFiles => {
+      const fileMap = new Map(prevFiles); // Start with existing files to preserve manual changes
+      
+      // Add/update existing files (only if not already manually modified)
+      existingFiles.forEach(file => {
+        const existingFile = fileMap.get(file.path);
+        if (!existingFile || (!existingFile.isModified && !existingFile.isAIGenerated)) {
+          // Only update if file doesn't exist or hasn't been modified
+          fileMap.set(file.path, {
+            path: file.path,
+            content: file.content || '',
+            originalContent: file.content || '',
+            isModified: false,
+            isAIGenerated: false,
+            isSelected: false,
+            isNew: false,
+            language: getLanguageFromPath(file.path),
+            lastModified: new Date(),
+          });
+        } else if (existingFile && !existingFile.originalContent) {
+          // Update original content if it's missing but preserve current content
+          fileMap.set(file.path, {
+            ...existingFile,
+            originalContent: file.content || '',
+          });
+        }
       });
-    });
 
-    // Add AI-generated files
-    aiGeneratedFiles.forEach(file => {
-      fileMap.set(file.path, {
-        path: file.path,
-        content: file.content,
-        originalContent: file.isNew ? '' : file.content,
-        isModified: true,
-        isAIGenerated: true,
-        isSelected: true,
-        isNew: file.isNew,
-        language: getLanguageFromPath(file.path),
-        lastModified: new Date(),
+      // Add/update AI-generated files
+      aiGeneratedFiles.forEach(file => {
+        const existingFile = fileMap.get(file.path);
+        if (existingFile) {
+          // File exists - update it while preserving original content
+          const trueOriginalContent = existingFile.originalContent || 
+                                     file.originalContent || 
+                                     existingFile.content;
+          fileMap.set(file.path, {
+            ...existingFile,
+            content: file.content,
+            originalContent: trueOriginalContent, // Preserve the true original
+            isModified: true,
+            isAIGenerated: true,
+            isSelected: true,
+            isNew: file.isNew && !trueOriginalContent, // Only new if no original content
+            lastModified: new Date(),
+          });
+        } else {
+          // New file - create fresh
+          fileMap.set(file.path, {
+            path: file.path,
+            content: file.content,
+            originalContent: file.originalContent || (file.isNew ? '' : file.content),
+            isModified: true,
+            isAIGenerated: true,
+            isSelected: true,
+            isNew: file.isNew,
+            language: getLanguageFromPath(file.path),
+            lastModified: new Date(),
+          });
+        }
       });
-    });
 
-    setFiles(fileMap);
+      return fileMap;
+    });
 
     // Auto-open AI-generated files in tabs (add to existing tabs, don't replace)
     const aiFiles = aiGeneratedFiles.map(f => f.path);
@@ -579,8 +863,9 @@ export const FileWorkspaceManager = forwardRef<FileWorkspaceManagerHandle, FileW
 
   useImperativeHandle(ref, () => ({
     openFile,
+    openDiffView,
     clearAllModifications,
-  }), [openFile, clearAllModifications]);
+  }), [openFile, openDiffView, clearAllModifications]);
 
   const closeTab = useCallback((path: string) => {
     setOpenTabs(prev => {
@@ -782,7 +1067,11 @@ export const FileWorkspaceManager = forwardRef<FileWorkspaceManagerHandle, FileW
                     height: '2px'
                   }
                 }}
-                style={{ minHeight: '35px' }}
+                style={{ 
+                  minHeight: '35px',
+                  maxWidth: '100%',
+                  width: '100%'
+                }}
               >
                 {openTabs.map(path => {
                   const file = files.get(path);
@@ -792,12 +1081,16 @@ export const FileWorkspaceManager = forwardRef<FileWorkspaceManagerHandle, FileW
                       value={path}
                       className={`${classes.fileTab} ${file?.isModified ? 'modified' : ''} ${file?.isAIGenerated ? 'ai-generated' : ''}`}
                       style={{
-                        minWidth: '120px',
-                        maxWidth: '200px',
+                        minWidth: '80px',
+                        maxWidth: '180px',
+                        width: 'auto',
                         textTransform: 'none',
                         fontSize: '13px',
                         color: activeTab === path ? '#ffffff' : '#969696',
                         backgroundColor: activeTab === path ? '#1e1e1e' : '#2d2d30',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                       }}
                       label={
                         <Box 
@@ -858,7 +1151,104 @@ export const FileWorkspaceManager = forwardRef<FileWorkspaceManagerHandle, FileW
           )}
 
           {/* Editor Content */}
-          {activeFile && (
+          {isDiffView && diffFile ? (
+            // Diff View
+            (() => {
+              const file = files.get(diffFile);
+              if (!file) return null;
+              
+              // Ensure we have proper original content for diff
+              const originalContent = file.originalContent || '';
+              const currentContent = file.content || '';
+              
+              // Verify content synchronization (for debugging)
+              const isContentInSync = currentContent === file.content;
+              
+              // Debug log to help identify issues
+              console.log('Diff View Debug:', {
+                filePath: file.path,
+                hasOriginal: !!file.originalContent,
+                originalLength: originalContent.length,
+                currentLength: currentContent.length,
+                isModified: file.isModified,
+                isAIGenerated: file.isAIGenerated,
+                isNew: file.isNew,
+                contentInSync: isContentInSync
+              });
+              
+              const diffLines = generateDiffLines(originalContent, currentContent);
+              
+              return (
+                <div className={classes.editorContainer}>
+                  {/* Diff View Header */}
+                  <div className={classes.diffViewHeader}>
+                    <Typography variant="h6" style={{ color: '#cccccc' }}>
+                      Diff: {file.path}
+                    </Typography>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <Button
+                        size="small"
+                        onClick={closeDiffView}
+                        style={{ color: '#cccccc' }}
+                      >
+                        Close Diff
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {/* Diff Content */}
+                  {file.isNew ? (
+                    // New File View - Unified view showing all content as added
+                    <div className={classes.unifiedDiffContainer}>
+                      <div className={classes.unifiedDiffContent}>
+                        {currentContent.split('\n').map((line, index) => (
+                          <div
+                            key={index}
+                            className={`${classes.unifiedDiffLine} ${classes.added}`}
+                          >
+                            <div className={classes.diffLineNumbers}>
+                              <span className={classes.oldLineNumber}></span>
+                              <span className={classes.newLineNumber}>{index + 1}</span>
+                            </div>
+                            <div className={classes.linePrefix}>+</div>
+                            <div className={classes.lineContent}>{line}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    // Modern Unified Diff View
+                    <div className={classes.unifiedDiffContainer}>
+                      <div className={classes.unifiedDiffContent}>
+                        {diffLines.map((line, index) => (
+                          <div
+                            key={index}
+                            className={`${classes.unifiedDiffLine} ${classes[line.type]}`}
+                          >
+                            <div className={classes.diffLineNumbers}>
+                              <span className={classes.oldLineNumber}>
+                                {line.originalLineNumber || ''}
+                              </span>
+                              <span className={classes.newLineNumber}>
+                                {line.lineNumber || ''}
+                              </span>
+                            </div>
+                            <div className={classes.linePrefix}>
+                              {line.type === 'added' ? '+' : line.type === 'removed' ? '-' : ' '}
+                            </div>
+                            <div className={classes.lineContent}>
+                              {line.content}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()
+          ) : activeFile ? (
+            // Normal Editor View
             <div className={classes.editorContainer}>
               {/* File Actions */}
               <div className={classes.fileActionButtons}>
@@ -953,26 +1343,26 @@ export const FileWorkspaceManager = forwardRef<FileWorkspaceManagerHandle, FileW
                 )}
               </div>
             </div>
-          )}
-
-          {/* Empty state */}
-          {openTabs.length === 0 && (
-            <Box
-              display="flex"
-              flexDirection="column"
-              alignItems="center"
-              justifyContent="center"
-              height="100%"
-              p={4}
-            >
-              <FolderIcon style={{ fontSize: 64, color: '#ccc', marginBottom: 16 }} />
-              <Typography variant="h6" color="textSecondary">
-                No files open
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Select a file from the sidebar to start editing
-              </Typography>
-            </Box>
+          ) : (
+            // Empty state when no files are open and not in diff view
+            !isDiffView && (
+              <Box
+                display="flex"
+                flexDirection="column"
+                alignItems="center"
+                justifyContent="center"
+                height="100%"
+                p={4}
+              >
+                <FolderIcon style={{ fontSize: 64, color: '#ccc', marginBottom: 16 }} />
+                <Typography variant="h6" color="textSecondary">
+                  No files open
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  Select a file from the sidebar to start editing
+                </Typography>
+              </Box>
+            )
           )}
         </div>
       </div>
