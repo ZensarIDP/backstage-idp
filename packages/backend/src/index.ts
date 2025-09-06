@@ -6,6 +6,13 @@
  * Happy hacking!
  */
 
+// Load environment variables from .env file
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Load .env from project root
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+
 import { createBackend } from '@backstage/backend-defaults';
 
 const backend = createBackend();

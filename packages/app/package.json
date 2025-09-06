@@ -46,6 +46,7 @@
     "@backstage/plugin-user-settings": "^0.8.24",
     "@backstage/theme": "^0.6.7",
     "@backstage/ui": "^0.6.0",
+    "@internal/plugin-ai-assistant": "workspace:^",
     "@material-ui/core": "^4.12.2",
     "@material-ui/icons": "^4.9.1",
     "@octokit/rest": "^22.0.0",
