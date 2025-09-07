@@ -12,8 +12,14 @@ aiAssistant:
   openai:
     apiKey: ""
     model: 'gpt-4o' # or 'gpt-3.5-turbo' for cost efficiency
-    maxTokens: 2000
-    temperature: 0.3 # Lower for more consistent code generation
+    maxTokens: 4000 # Increased for better responses
+    temperature: 0.2 # Lower for more consistent code generation
+  # Enhanced context configuration
+  context:
+    enabled: true
+    includeProjectSecrets: true
+    includeRepositoryContext: true
+    useEnhancedPrompting: true
 
 backend:
   # Used for enabling authentication, secret is shared by all backend plugins

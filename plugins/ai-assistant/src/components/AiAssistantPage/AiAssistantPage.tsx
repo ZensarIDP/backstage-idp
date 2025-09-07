@@ -1745,11 +1745,11 @@ export const AiAssistantPage = () => {
                           OPENWEATHER_API_KEY: 'Your OpenWeather API Key for weather services'
                         },
                         instructions: {
-                          codeGeneration: 'Generate production-ready, complete files/scripts that can be used immediately without modification. Use the exact GitHub secret variable names listed above when referencing secrets in CI/CD workflows, deployment scripts, or configuration files.',
-                          contextAwareness: 'You have access to the complete DevOps context of this project including infrastructure files, CI/CD pipelines, configuration files, deployment scripts, and environment settings. Use this context to generate appropriate solutions.',
-                          gcpIntegration: 'When generating GCP-related code (Cloud Run, Cloud Build, IAM, etc.), always use the exact secret names: GCP_PROJECT_ID, GCP_REGION, and GCP_SA_KEY.',
+                          codeGeneration: 'Generate production-ready, complete files/scripts that can be used immediately without modification. Use the exact GitHub secret variable names listed above when referencing secrets in CI/CD workflows, deployment scripts, or configuration files. When modifying existing files, update the same file rather than creating new ones.',
+                          contextAwareness: 'You have access to the complete DevOps context of this project including infrastructure files, CI/CD pipelines, configuration files, deployment scripts, and environment settings. Use this context to generate appropriate solutions. Remember all files you generate and modify them when requested instead of creating new files.',
+                          gcpIntegration: 'When generating GCP-related code (Cloud Run, Cloud Build, IAM, etc.), always use the exact secret names: GCP_PROJECT_ID, GCP_REGION, and GCP_SA_KEY. CRITICAL: Always use Google Artifact Registry instead of GCR. Always include repository creation step. Repository name must match GitHub repository name exactly.',
                           fileFormats: 'Generate complete, properly formatted files including headers, comments, error handling, and best practices. Files should be ready to commit and deploy.',
-                          devopsPattern: 'Follow industry-standard DevOps patterns: infrastructure as code, GitOps workflows, proper secret management, multi-environment support, and comprehensive documentation.'
+                          devopsPattern: 'Follow industry-standard DevOps patterns: infrastructure as code, GitOps workflows, proper secret management, multi-environment support, and comprehensive documentation. For GCP deployments, always use Artifact Registry and include repository creation steps.'
                         },
                         capabilities: [
                           'Generate complete CI/CD workflows using exact GitHub secret names',

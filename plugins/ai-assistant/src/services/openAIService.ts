@@ -66,7 +66,22 @@ export class OpenAIService {
 
   async generateResponse(request: AIRequest): Promise<AIResponse> {
     try {
-      const systemPrompt = this.buildSystemPrompt(request);
+      // Check if this is a conversation-only request (analysis, summary, explanation)
+      const isConversationOnly = request.prompt.toLowerCase().includes('summarize') ||
+                                 request.prompt.toLowerCase().includes('summary') ||
+                                 request.prompt.toLowerCase().includes('what does') ||
+                                 request.prompt.toLowerCase().includes('explain') ||
+                                 request.prompt.toLowerCase().includes('analyze') ||
+                                 request.prompt.toLowerCase().includes('check') ||
+                                 request.prompt.toLowerCase().includes('review') ||
+                                 request.prompt.toLowerCase().includes('describe') ||
+                                 request.prompt.toLowerCase().includes('tell me') ||
+                                 request.prompt.toLowerCase().includes('where does') ||
+                                 request.prompt.toLowerCase().includes('how does') ||
+                                 request.prompt.toLowerCase().includes('what is') ||
+                                 request.prompt.toLowerCase().includes('why does');
+
+      const systemPrompt = this.buildSystemPrompt(request, isConversationOnly);
       const userPrompt = this.buildUserPrompt(request);
 
       const model = this.config.getOptionalString('aiAssistant.openai.model') || 'gpt-4o';
@@ -74,7 +89,13 @@ export class OpenAIService {
       const temperature = this.config.getOptionalNumber('aiAssistant.openai.temperature') || 0.3;
 
       // Log request for troubleshooting
-      console.info('[OpenAIService] Sending request:', { model, maxTokens, temperature });
+      console.info('[OpenAIService] generateResponse:', { 
+        model, 
+        maxTokens, 
+        temperature, 
+        isConversationOnly,
+        requestType: isConversationOnly ? 'CONVERSATION_ONLY' : 'POTENTIAL_FILE_GENERATION'
+      });
 
       const completion = await this.openai.chat.completions.create({
         model: model,
@@ -89,6 +110,16 @@ export class OpenAIService {
       const response = completion.choices[0]?.message?.content;
       if (!response) {
         throw new Error('No response from OpenAI');
+      }
+
+      // For conversation-only requests, return simple conversation response
+      if (isConversationOnly) {
+        console.log('[OpenAIService] Conversation-only response - no file parsing');
+        return {
+          message: response,
+          type: 'conversation',
+          files: []
+        };
       }
 
       return this.parseAIResponse(response, request);
@@ -112,12 +143,33 @@ export class OpenAIService {
     }
   }
 
-  private buildSystemPrompt(request: AIRequest): string {
+  private buildSystemPrompt(request: AIRequest, isConversationOnly: boolean = false): string {
     const repoInfo = `${request.repository.owner}/${request.repository.name}`;
     const existingFilesInfo = request.existingFiles.length > 0 
       ? `Existing files: ${request.existingFiles.map(f => `${f.path} (${f.type})`).join(', ')}`
       : 'No existing configuration files found';
 
+    if (isConversationOnly) {
+      // Conversation-only system prompt - NEVER generates files
+      return `You are an expert DevOps and software engineer AI assistant integrated into Backstage. 
+You are helping analyze repository: ${repoInfo} on branch: ${request.branch}.
+
+${existingFilesInfo}
+
+IMPORTANT: You are in CONVERSATION-ONLY mode. Your role is to:
+1. Analyze and explain existing files and configurations
+2. Answer questions about code, deployments, and DevOps practices  
+3. Provide summaries and explanations
+4. Offer guidance and best practices
+5. NEVER generate, create, or modify any files
+
+You should respond with conversational text only - no file content, no code blocks for files.
+Focus on explaining, analyzing, and providing helpful information about the user's question.
+
+Respond naturally as if having a conversation with a developer who wants to understand their codebase.`;
+    }
+
+    // Original system prompt for file generation
     return `You are an expert DevOps and software engineer AI assistant integrated into Backstage. 
 You are helping with repository: ${repoInfo} on branch: ${request.branch}.
 
@@ -283,7 +335,11 @@ Always respond in JSON format:
     }
   }
 
-  async generateCodeWithContext(
+  /**
+   * Generate file analysis without file modification
+   * Optimized for reading and understanding existing files
+   */
+  async generateFileAnalysis(
     request: string,
     repository?: Entity,
     existingFiles?: { [key: string]: string },
@@ -299,7 +355,173 @@ Always respond in JSON format:
       capabilities: string[];
     }
   ): Promise<string> {
-    console.log('[OpenAIService] Generating code with full context');
+    console.log('[OpenAIService] generateFileAnalysis called:', {
+      requestLength: request.length,
+      hasRepository: !!repository,
+      existingFilesCount: existingFiles ? Object.keys(existingFiles).length : 0,
+      hasProjectContext: !!projectContext,
+    });
+    
+    try {
+      // Build analysis-specific context
+      let contextPrompt = '';
+      
+      if (repository) {
+        const repoInfo = repository.metadata?.annotations?.['github.com/project-slug'];
+        if (repoInfo) {
+          const [owner, repo] = repoInfo.split('/');
+          contextPrompt += `
+# Repository Analysis: ${owner}/${repo}
+
+## Project Information:
+- Repository: ${repository.metadata?.name}
+- Description: ${repository.metadata?.description || 'No description available'}
+- Primary Language: ${repository.metadata?.annotations?.['github.com/language'] || 'Unknown'}
+- Topics: ${repository.metadata?.annotations?.['github.com/topics'] || 'None'}
+
+`;
+        }
+      }
+
+      // Add project context if provided
+      if (projectContext) {
+        contextPrompt += `
+## GitHub Secrets Available
+${Object.entries(projectContext.githubSecrets).map(([key, desc]) => `- **${key}**: ${desc}`).join('\n')}
+
+## Project Guidelines
+${projectContext.instructions.contextAwareness}
+${projectContext.instructions.gcpIntegration}
+${projectContext.instructions.devopsPattern}
+
+`;
+      }
+
+      // Add existing files context for analysis
+      if (existingFiles && Object.keys(existingFiles).length > 0) {
+        contextPrompt += `
+## Repository Files for Analysis:
+`;
+        Object.entries(existingFiles).forEach(([filepath, content]) => {
+          const fileExtension = this.getFileExtension(filepath);
+          contextPrompt += `
+### File: ${filepath}
+\`\`\`${fileExtension}
+${content.substring(0, 3000)}${content.length > 3000 ? '\n... (content truncated for context)' : ''}
+\`\`\`
+
+`;
+        });
+      }
+
+      // Analysis-specific system prompt
+      const systemPrompt = `You are an expert DevOps and infrastructure analyst with deep knowledge of CI/CD, cloud platforms, and software architecture.
+
+${contextPrompt}
+
+## Your Role - FILE ANALYSIS MODE:
+You are in ANALYSIS MODE - your job is to read, understand, and explain existing files and configurations.
+
+### What you should do:
+1. **Analyze file contents** thoroughly and provide specific insights
+2. **Answer specific questions** about deployment targets, configurations, and setup
+3. **Explain what files do** in detail with specific examples from the actual content
+4. **Identify deployment targets** (AWS, GCP, Azure, etc.) by examining the actual configuration
+5. **Provide actionable insights** about the infrastructure and CI/CD setup
+6. **Reference specific lines or configurations** from the files when explaining
+
+### What you should NOT do:
+- Do not generate or modify any files
+- Do not provide file content or code blocks
+- Do not suggest creating new files
+- Focus purely on analysis and explanation
+
+### Response Style:
+- Be specific and reference actual file contents
+- Answer questions directly with evidence from the files
+- Provide clear, actionable insights
+- Use a conversational, helpful tone
+- When asked "where does this deploy", examine the files and tell exactly where
+
+Remember: You have access to the actual file contents above. Use them to provide specific, accurate answers.
+
+User Request: ${request}`;
+
+      const model = this.config.getOptionalString('aiAssistant.openai.model') || 'gpt-4o';
+      const maxTokens = this.config.getOptionalNumber('aiAssistant.openai.maxTokens') || 3000;
+      const temperature = this.config.getOptionalNumber('aiAssistant.openai.temperature') || 0.3;
+
+      console.log('[OpenAIService] Analysis request:', {
+        model,
+        maxTokens,
+        temperature,
+        hasFiles: !!(existingFiles && Object.keys(existingFiles).length > 0)
+      });
+
+      const completion = await this.openai.chat.completions.create({
+        model: model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: request }
+        ],
+        max_tokens: maxTokens,
+        temperature: temperature,
+      });
+
+      const content = completion.choices?.[0]?.message?.content;
+      
+      if (!content) {
+        throw new Error('No content received from OpenAI API');
+      }
+
+      console.log('[OpenAIService] File analysis completed:', {
+        contentLength: content.length,
+        tokensUsed: completion.usage?.total_tokens || 'unknown'
+      });
+
+      return content;
+      
+    } catch (error) {
+      console.error('[OpenAIService] Error in file analysis:', error);
+      throw error;
+    }
+  }
+
+  async generateCodeWithContext(
+    request: string,
+    repository?: Entity,
+    existingFiles?: { [key: string]: string },
+    projectContext?: {
+      githubSecrets: { [key: string]: string };
+      instructions: {
+        codeGeneration: string;
+        contextAwareness: string;
+        gcpIntegration: string;
+        fileFormats: string;
+        devopsPattern: string;
+      };
+      capabilities: string[];
+    },
+    conversationHistory?: Array<{
+      role: 'user' | 'assistant';
+      content: string;
+    }>,
+    generatedFilesContext?: string
+  ): Promise<string> {
+    
+    // Trust the intelligent intent classification system instead of using unreliable keyword detection
+    // The intent classification service has already determined this should use generateCodeWithContext
+    console.log('[OpenAIService] Using AI-powered intent classification result. Proceeding with context generation.');
+    
+    console.log('[OpenAIService] generateCodeWithContext called with:', {
+      requestLength: request.length,
+      hasRepository: !!repository,
+      existingFilesCount: existingFiles ? Object.keys(existingFiles).length : 0,
+      hasProjectContext: !!projectContext,
+      projectContextSecrets: projectContext ? Object.keys(projectContext.githubSecrets) : [],
+      conversationHistoryLength: conversationHistory ? conversationHistory.length : 0,
+      hasGeneratedFilesContext: !!generatedFilesContext
+    });
     
     try {
       // Build enhanced context with repository analysis and existing files
@@ -360,6 +582,11 @@ ${projectContext.capabilities.map(cap => `- ${cap}`).join('\n')}
 `;
       }
 
+      // Add generated files context if provided
+      if (generatedFilesContext) {
+        contextPrompt += generatedFilesContext;
+      }
+
       // Add existing files context if provided
       if (existingFiles && Object.keys(existingFiles).length > 0) {
         contextPrompt += `
@@ -387,9 +614,39 @@ ${content.substring(0, 2000)}${content.length > 2000 ? '\n... (truncated)' : ''}
       }
 
       // Enhanced system prompt with context awareness
-      const systemPrompt = `You are an expert AI developer assistant with full access to the repository context.
+      const systemPrompt = `You are an expert AI developer assistant with full access to the repository context and conversation history.
 
 ${contextPrompt}
+
+## Conversation Memory Guidelines:
+- You maintain context from previous messages in this conversation
+- If you just generated a file and the user asks about it, refer to the specific file you created
+- When asked "Is this file ready to use?" after generating a file, review the file you just created
+- Remember files you've generated, their names, and their purposes
+- Provide specific answers about files you've created rather than generic responses
+
+## Iterative Development Guidelines:
+- When asked to modify a file you previously generated, update the existing content rather than creating a new file
+- Reference previous versions and explain what changes you're making
+- For pipeline/deployment files, always include repository creation steps for Artifact Registry
+- When improving files, maintain existing structure while adding enhancements
+- Always provide complete, production-ready files that can be used immediately
+- If user asks to change something in a file (like "use X instead of Y"), modify the existing file, don't create a new one
+
+## GCP Best Practices (ALWAYS FOLLOW):
+- **NEVER use Google Container Registry (GCR)** - always use Google Artifact Registry
+- **ALWAYS check if Artifact Registry repository exists** before pushing images
+- **ALWAYS create repository if it doesn't exist** using gcloud commands
+- **Repository name should match the GitHub repository name** exactly
+- **Include repository creation step in all GCP deployment pipelines**
+- **Use format: REGION-docker.pkg.dev/PROJECT_ID/REPO_NAME/IMAGE_NAME**
+
+## Docker Image Best Practices for GCP:
+- Always use Artifact Registry instead of GCR
+- Always include repository creation step with gcloud artifacts repositories create command
+- Always check if repository exists before creating
+- Use exact GitHub repository name for Artifact Registry repository name
+- Follow format: REGION-docker.pkg.dev/PROJECT_ID/REPO_NAME/IMAGE_NAME:TAG
 
 ## Your Capabilities:
 - Generate new files following project conventions
@@ -421,18 +678,41 @@ User Request: ${request}`;
       const maxTokens = this.config.getOptionalNumber('aiAssistant.openai.maxTokens') || 4000;
       const temperature = this.config.getOptionalNumber('aiAssistant.openai.temperature') || 0.3;
 
+      // Build messages array with conversation history
+      const messages: Array<{role: 'system' | 'user' | 'assistant', content: string}> = [
+        {
+          role: 'system',
+          content: systemPrompt
+        }
+      ];
+
+      // Add conversation history if provided (excluding system messages)
+      if (conversationHistory && conversationHistory.length > 0) {
+        // Take last 10 messages to avoid token limits
+        const recentHistory = conversationHistory.slice(-10);
+        recentHistory.forEach(msg => {
+          messages.push({
+            role: msg.role === 'user' ? 'user' : 'assistant',
+            content: msg.content
+          });
+        });
+      }
+
+      // Add current request
+      messages.push({
+        role: 'user',
+        content: request
+      });
+
+      console.log('[OpenAIService] Sending messages:', {
+        messageCount: messages.length,
+        hasHistory: !!(conversationHistory && conversationHistory.length > 0),
+        historyLength: conversationHistory ? conversationHistory.length : 0
+      });
+
       const completion = await this.openai.chat.completions.create({
         model: model,
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt
-          },
-          {
-            role: 'user',
-            content: request
-          }
-        ],
+        messages: messages,
         max_tokens: maxTokens,
         temperature: temperature,
       });
@@ -441,6 +721,22 @@ User Request: ${request}`;
       
       if (!content) {
         throw new Error('No content received from OpenAI API');
+      }
+
+      console.log('[OpenAIService] generateCodeWithContext response:', {
+        contentLength: content.length,
+        hasFileContent: content.includes('FILE_START'),
+        model: model,
+        tokensUsed: completion.usage?.total_tokens || 'unknown'
+      });
+
+      // Validate response quality to prevent repetitive responses
+      if (content.length < 50) {
+        console.warn('[OpenAIService] Response too short, may be low quality');
+      }
+      
+      if (content.includes('Created') && content.includes('Regenerate')) {
+        console.warn('[OpenAIService] Detected potentially repetitive response pattern');
       }
 
       console.log('[OpenAIService] Code generation successful with context');

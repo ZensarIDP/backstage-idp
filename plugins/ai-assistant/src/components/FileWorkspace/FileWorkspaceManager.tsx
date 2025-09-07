@@ -13,7 +13,6 @@ import {
   TextField,
   Checkbox,
   FormControlLabel,
-  IconButton,
   Menu,
   MenuItem,
   List,
@@ -1126,21 +1125,34 @@ export const FileWorkspaceManager = forwardRef<FileWorkspaceManagerHandle, FileW
                               ●
                             </span>
                           )}
-                          <IconButton
-                            size="small"
+                          <span
                             style={{ 
                               padding: '2px',
                               marginLeft: '2px',
                               color: '#969696',
                               flexShrink: 0,
+                              cursor: 'pointer',
+                              borderRadius: '3px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '18px',
+                              height: '18px',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'transparent';
                             }}
                             onClick={(e) => {
                               e.stopPropagation();
                               closeTab(path);
                             }}
+                            title="Close tab"
                           >
                             <CloseIcon style={{ fontSize: '14px' }} />
-                          </IconButton>
+                          </span>
                         </Box>
                       }
                     />

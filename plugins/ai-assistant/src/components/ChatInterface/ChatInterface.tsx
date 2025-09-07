@@ -16,6 +16,7 @@ import {
   FolderOpen as OpenIcon,
 } from '@material-ui/icons';
 import { OpenAIService } from '../../services/openAIService';
+import { intentClassificationService } from '../../services/intentClassificationService';
 
 const useStyles = makeStyles(() => ({
   chatContainer: {
@@ -310,6 +311,16 @@ interface Message {
   }>;
 }
 
+interface GeneratedFile {
+  path: string;
+  content: string;
+  isNew: boolean;
+  originalContent?: string;
+  generatedAt: Date;
+  lastModified: Date;
+  version: number;
+}
+
 interface ChatInterfaceProps {
   repository: any;
   branch: string;
@@ -344,6 +355,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const classes = useStyles();
   const configApi = useApi(configApiRef);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [generatedFiles, setGeneratedFiles] = useState<GeneratedFile[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -364,7 +376,62 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }, [configApi]);
 
   // Helper function to extract files from context response
-  const extractFilesFromContextResponse = (response: string): Array<{path: string, content: string, isNew: boolean}> => {
+  // File memory management functions
+const addOrUpdateGeneratedFile = (file: {path: string, content: string, isNew: boolean}) => {
+    const now = new Date();
+    setGeneratedFiles(prev => {
+      const existing = prev.find(f => f.path === file.path);
+      if (existing) {
+        // Update existing file
+        return prev.map(f => 
+          f.path === file.path 
+            ? { ...f, content: file.content, lastModified: now, version: f.version + 1 }
+            : f
+        );
+      } else {
+        // Add new file
+        return [...prev, {
+          path: file.path,
+          content: file.content,
+          isNew: file.isNew,
+          generatedAt: now,
+          lastModified: now,
+          version: 1
+        }];
+      }
+    });
+  };
+
+  const getGeneratedFileContext = (): string => {
+    if (generatedFiles.length === 0) return '';
+    
+    let context = '\n## Previously Generated Files in This Session:\n';
+    
+    generatedFiles.forEach(file => {
+      const fileExt = file.path.split('.').pop() || 'txt';
+      const content = file.content.length > 1000 
+        ? file.content.substring(0, 1000) + '\n... (truncated)' 
+        : file.content;
+      
+      context += `
+### ${file.path} (v${file.version})
+- Generated: ${file.generatedAt.toLocaleTimeString()}
+- Last Modified: ${file.lastModified.toLocaleTimeString()}
+- Type: ${file.isNew ? 'New file' : 'Modified existing file'}
+
+\`\`\`${fileExt}
+${content}
+\`\`\`
+`;
+    });
+    
+    context += '\n**IMPORTANT FOR AI**: When asked to modify any of these files, update the existing content rather than creating a new file. Reference these files by their exact paths when discussing them. If user says "use X instead of Y" or "don\'t use Z", modify the existing file.\n';
+    
+    return context;
+  };
+
+const extractFilesFromContextResponse = (response: string): Array<{path: string, content: string, isNew: boolean}> => {
+
     const files: Array<{path: string, content: string, isNew: boolean}> = [];
     
     // Extract FILE_START/FILE_END blocks
@@ -522,15 +589,100 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         })),
       };
       
-      // Use generateCodeWithContext for requests that involve modifying existing files
-      const shouldUseContext = content.toLowerCase().includes('modify') || 
-                              content.toLowerCase().includes('update') || 
-                              content.toLowerCase().includes('change') ||
-                              content.toLowerCase().includes('fix') ||
-                              existingFiles.length > 0;
+      // 🧠 UNBREAKABLE AI-POWERED INTENT CLASSIFICATION
+      // This replaces fragile keyword matching with robust semantic understanding
+      console.log('[ChatInterface] 🤖 Starting AI-powered intent classification...');
+      
+      const classificationContext = {
+        userMessage: content,
+        hasRepository: !!repository.entity,
+        availableFiles: existingFiles.map(f => f.path),
+        generatedFiles: generatedFiles.map(f => f.path),
+        conversationHistory: messages.slice(-6).map(msg => ({
+          role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
+          content: msg.content
+        })),
+        currentFile: undefined // TODO: Add current file context if available
+      };
+
+      const intentResult = await intentClassificationService.classifyIntent(classificationContext);
+      
+      console.log('[ChatInterface] 🎯 INTENT CLASSIFICATION RESULT:', {
+        intent: intentResult.intent,
+        confidence: intentResult.confidence,
+        reasoning: intentResult.reasoning,
+        context: intentResult.context,
+        originalMessage: content
+      });
+
+      // Route based on AI-determined intent
+      const shouldUseAnalysisMode = intentResult.intent === 'ANALYZE';
+      const shouldUseModificationMode = intentResult.intent === 'MODIFY';
+      const shouldUseGenerationMode = intentResult.intent === 'GENERATE';
+      const shouldUseContextMode = shouldUseModificationMode || shouldUseGenerationMode;
+
+      console.log('[ChatInterface] 🧠 INTELLIGENT REQUEST CLASSIFICATION:', {
+        request: content,
+        classification: {
+          intent: intentResult.intent,
+          confidence: intentResult.confidence,
+          reasoning: intentResult.reasoning
+        },
+        routing: {
+          shouldUseAnalysisMode,
+          shouldUseContextMode,
+          shouldUseModificationMode,
+          shouldUseGenerationMode,
+          willReadFiles: shouldUseAnalysisMode,
+          willModifyFiles: shouldUseContextMode
+        },
+        context: intentResult.context,
+        hasRepository: !!repository.entity,
+        hasGeneratedFiles: generatedFiles.length > 0,
+        expectedBehavior: shouldUseAnalysisMode ? 'READ FILES + ANALYZE' : 
+                         shouldUseContextMode ? 'GENERATE/MODIFY FILES' : 'BASIC CONVERSATION'
+      });
+      
+      // VALIDATION: Check for classification conflicts (should be rare with AI classification)
+      if (shouldUseAnalysisMode && shouldUseContextMode) {
+        console.warn('[ChatInterface] ⚠️ CLASSIFICATION CONFLICT: Both analysis and context modes triggered');
+        console.warn('[ChatInterface] Request:', content);
+        console.warn('[ChatInterface] Intent:', intentResult.intent, 'Confidence:', intentResult.confidence);
+      }
       
       let response;
-      if (shouldUseContext && repository.entity) {
+      
+      // INTELLIGENT ROUTING SYSTEM
+      if (shouldUseAnalysisMode && repository.entity) {
+        // FILE ANALYSIS MODE: Read files and provide intelligent insights
+        console.log('[ChatInterface] � ANALYSIS MODE: Reading files for intelligent analysis');
+        
+        // Build comprehensive file context for analysis
+        const analysisContext: { [key: string]: string } = {};
+        existingFiles.forEach(f => {
+          if (f.content) {
+            analysisContext[f.path] = f.content;
+          }
+        });
+        
+        // Use analysis-specific AI service call
+        const analysisResponse = await openAIService.generateFileAnalysis(
+          content,
+          repository.entity,
+          analysisContext,
+          projectContext
+        );
+        
+        response = {
+          message: analysisResponse,
+          type: 'analysis',
+          files: []
+        };
+        
+      } else if (shouldUseContextMode && repository.entity) {
+        // FILE MODIFICATION/GENERATION MODE: Create or modify files
+        console.log('[ChatInterface] 🔧 CONTEXT MODE: Using enhanced context for file operations');
+        
         // Build existing files context
         const existingFilesContext: { [key: string]: string } = {};
         existingFiles.forEach(f => {
@@ -539,24 +691,50 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           }
         });
         
+        // Build conversation history for context
+        const conversationHistory = messages.slice(-8).map(msg => ({
+          role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
+          content: msg.content
+        }));
+        
+        // Get generated files context for file memory
+        const generatedFilesContext = getGeneratedFileContext();
+        
         const contextResponse = await openAIService.generateCodeWithContext(
           content,
           repository.entity,
           existingFilesContext,
-          projectContext
+          projectContext,
+          conversationHistory,
+          generatedFilesContext
         );
         
-        // Parse the context response for files using the same logic
+        // Parse the context response for files
         const files = extractFilesFromContextResponse(contextResponse);
         const messageText = extractMessageFromContextResponse(contextResponse);
+        
+        // Update generated files memory
+        files.forEach(file => {
+          addOrUpdateGeneratedFile(file);
+        });
         
         response = {
           message: messageText,
           type: files.length > 0 ? 'file_generation' : 'conversation',
           files: files,
         };
+        
       } else {
+        // BASIC CONVERSATION MODE: Simple AI chat without file operations
+        console.log('[ChatInterface] 💬 CONVERSATION MODE: Basic AI response without file operations');
         response = await openAIService.generateResponse(aiRequest);
+      }
+      
+      // Update generated files memory for any response that includes files
+      if (response.files && response.files.length > 0) {
+        response.files.forEach((file: any) => {
+          addOrUpdateGeneratedFile(file);
+        });
       }
       
       return {
