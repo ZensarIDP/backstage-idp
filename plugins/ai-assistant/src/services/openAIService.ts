@@ -286,7 +286,18 @@ Always respond in JSON format:
   async generateCodeWithContext(
     request: string,
     repository?: Entity,
-    existingFiles?: { [key: string]: string }
+    existingFiles?: { [key: string]: string },
+    projectContext?: {
+      githubSecrets: { [key: string]: string };
+      instructions: {
+        codeGeneration: string;
+        contextAwareness: string;
+        gcpIntegration: string;
+        fileFormats: string;
+        devopsPattern: string;
+      };
+      capabilities: string[];
+    }
   ): Promise<string> {
     console.log('[OpenAIService] Generating code with full context');
     
@@ -310,6 +321,43 @@ Always respond in JSON format:
 
 `;
         }
+      }
+
+      // Add project context (GitHub secrets and instructions) if provided
+      if (projectContext) {
+        contextPrompt += `
+## GitHub Secrets Configuration
+The following GitHub secrets are available for use in CI/CD workflows and deployment scripts:
+
+`;
+        Object.entries(projectContext.githubSecrets).forEach(([secretName, description]) => {
+          contextPrompt += `- **${secretName}**: ${description}\n`;
+        });
+
+        contextPrompt += `
+
+**IMPORTANT**: Always use these EXACT secret names in your generated files. Do not modify or assume different names.
+
+## Code Generation Guidelines
+${projectContext.instructions.codeGeneration}
+
+## Context Awareness
+${projectContext.instructions.contextAwareness}
+
+## GCP Integration Guidelines
+${projectContext.instructions.gcpIntegration}
+
+## File Format Requirements
+${projectContext.instructions.fileFormats}
+
+## DevOps Patterns
+${projectContext.instructions.devopsPattern}
+
+## AI Assistant Capabilities
+You can generate the following types of files and configurations:
+${projectContext.capabilities.map(cap => `- ${cap}`).join('\n')}
+
+`;
       }
 
       // Add existing files context if provided

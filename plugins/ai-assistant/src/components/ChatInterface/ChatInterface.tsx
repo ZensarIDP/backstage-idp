@@ -317,6 +317,19 @@ interface ChatInterfaceProps {
   onResponse: (response: any) => void;
   onFilesGenerated?: (files: any[], request: any) => void;
   onOpenFile?: (filePath: string) => void;
+  projectContext?: {
+    githubSecrets: {
+      [key: string]: string;
+    };
+    instructions: {
+      codeGeneration: string;
+      contextAwareness: string;
+      gcpIntegration: string;
+      fileFormats: string;
+      devopsPattern: string;
+    };
+    capabilities: string[];
+  };
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -326,6 +339,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onResponse,
   onFilesGenerated,
   onOpenFile,
+  projectContext,
 }) => {
   const classes = useStyles();
   const configApi = useApi(configApiRef);
@@ -528,7 +542,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         const contextResponse = await openAIService.generateCodeWithContext(
           content,
           repository.entity,
-          existingFilesContext
+          existingFilesContext,
+          projectContext
         );
         
         // Parse the context response for files using the same logic

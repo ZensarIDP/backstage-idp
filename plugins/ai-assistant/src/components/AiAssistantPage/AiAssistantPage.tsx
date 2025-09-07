@@ -538,6 +538,95 @@ export const AiAssistantPage = () => {
       if (!data.tree) return [];
       let files = data.tree
         .filter((item: any) => item.type === 'blob')
+        .filter((item: any) => {
+          const path = item.path.toLowerCase();
+          const fileName = item.path.split('/').pop()?.toLowerCase() || '';
+          
+          // EXCLUDE: Common directories that bloat the results
+          if (path.includes('node_modules/') ||
+              path.includes('.git/') ||
+              path.includes('dist/') ||
+              path.includes('build/') ||
+              path.includes('coverage/') ||
+              path.includes('.next/') ||
+              path.includes('.nuxt/') ||
+              path.includes('vendor/') ||
+              path.includes('target/') ||
+              path.includes('bin/') ||
+              path.includes('obj/') ||
+              path.includes('packages/') ||
+              path.includes('libs/') ||
+              path.includes('assets/') ||
+              path.includes('public/') ||
+              path.includes('static/') ||
+              path.includes('images/') ||
+              path.includes('img/') ||
+              path.includes('fonts/') ||
+              path.includes('icons/') ||
+              path.includes('docs/') ||
+              path.includes('documentation/')) {
+            return false;
+          }
+          
+          // EXCLUDE: Source code files (not DevOps related)
+          if (path.endsWith('.js') ||
+              path.endsWith('.ts') ||
+              path.endsWith('.tsx') ||
+              path.endsWith('.jsx') ||
+              path.endsWith('.py') ||
+              path.endsWith('.java') ||
+              path.endsWith('.cs') ||
+              path.endsWith('.cpp') ||
+              path.endsWith('.c') ||
+              path.endsWith('.php') ||
+              path.endsWith('.rb') ||
+              path.endsWith('.go') ||
+              path.endsWith('.rs') ||
+              path.endsWith('.swift') ||
+              path.endsWith('.kt')) {
+            // Exception: Keep important config files even if they have code extensions
+            if (fileName === 'webpack.config.js' ||
+                fileName === 'next.config.js' ||
+                fileName === 'nuxt.config.js' ||
+                fileName === 'vue.config.js' ||
+                fileName === 'vite.config.js' ||
+                fileName === 'jest.config.js' ||
+                fileName === 'babel.config.js' ||
+                fileName === 'tailwind.config.js' ||
+                fileName === 'postcss.config.js' ||
+                fileName.includes('config.') ||
+                fileName.includes('settings.') ||
+                fileName === 'main.go' ||
+                fileName === 'manage.py' ||
+                fileName === 'wsgi.py' ||
+                fileName === 'asgi.py' ||
+                fileName === 'setup.py') {
+              return true;
+            }
+            return false;
+          }
+          
+          // EXCLUDE: UI/Frontend files
+          if (path.endsWith('.html') ||
+              path.endsWith('.css') ||
+              path.endsWith('.scss') ||
+              path.endsWith('.sass') ||
+              path.endsWith('.less') ||
+              path.endsWith('.svg') ||
+              path.endsWith('.png') ||
+              path.endsWith('.jpg') ||
+              path.endsWith('.jpeg') ||
+              path.endsWith('.gif') ||
+              path.endsWith('.ico') ||
+              path.endsWith('.woff') ||
+              path.endsWith('.woff2') ||
+              path.endsWith('.ttf') ||
+              path.endsWith('.eot')) {
+            return false;
+          }
+          
+          return true;
+        })
         .map((item: any) => ({
           path: item.path,
           type: classifyFileType(item.path),
@@ -548,16 +637,123 @@ export const AiAssistantPage = () => {
         );
       }
 
-      // Load content for important files
+      // Load content for DevOps and operational files only
       const filesToLoadContent = files
-        .filter((file: ExistingFile) =>
-          file.type !== 'other' ||
-          file.path.includes('package.json') ||
-          file.path.includes('tsconfig.json') ||
-          file.path.includes('app-config') ||
-          file.path.includes('config')
-        )
-        .slice(0, 10);
+        .filter((file: ExistingFile) => {
+          const fileName = file.path.split('/').pop()?.toLowerCase() || '';
+          const filePath = file.path.toLowerCase();
+          
+          // PRIORITY 1: Core DevOps/Infrastructure files
+          if (['dockerfile', 'ci-cd', 'terraform', 'helm'].includes(file.type)) {
+            return true;
+          }
+          
+          // PRIORITY 2: Essential build and package files
+          if (fileName === 'package.json' || 
+              fileName === 'pom.xml' ||
+              fileName === 'build.gradle' ||
+              fileName === 'go.mod' ||
+              fileName === 'cargo.toml' ||
+              fileName === 'requirements.txt' ||
+              fileName === 'composer.json' ||
+              fileName === 'gemfile' ||
+              fileName === 'poetry.lock' ||
+              fileName === 'yarn.lock' ||
+              fileName === 'package-lock.json') {
+            return true;
+          }
+          
+          // PRIORITY 3: Application configuration files
+          if (fileName === 'appsettings.json' ||
+              fileName === 'app.config' ||
+              fileName === 'web.config' ||
+              fileName === 'application.properties' ||
+              fileName === 'application.yml' ||
+              fileName === 'application.yaml' ||
+              fileName.includes('appsettings') ||
+              fileName.includes('application-')) {
+            return true;
+          }
+          
+          // PRIORITY 4: Environment and deployment configs
+          if (fileName === '.env' ||
+              fileName === '.env.example' ||
+              fileName === '.env.local' ||
+              fileName === '.env.dev' ||
+              fileName === '.env.development' ||
+              fileName === '.env.staging' ||
+              fileName === '.env.prod' ||
+              fileName === '.env.production' ||
+              fileName === 'docker-compose.yml' ||
+              fileName === 'docker-compose.yaml' ||
+              fileName === 'nginx.conf' ||
+              fileName === 'apache.conf' ||
+              fileName.includes('docker-compose')) {
+            return true;
+          }
+          
+          // PRIORITY 5: Infrastructure and DevOps scripts
+          if (fileName.endsWith('.sh') ||
+              fileName.endsWith('.bat') ||
+              fileName.endsWith('.ps1') ||
+              fileName.includes('setup-') ||
+              fileName.includes('deploy') ||
+              fileName.includes('build') ||
+              fileName.includes('install') ||
+              fileName.includes('pipeline') ||
+              fileName.includes('workflow')) {
+            return true;
+          }
+          
+          // PRIORITY 6: Documentation and metadata (DevOps related)
+          if (fileName === 'readme.md' ||
+              fileName === 'catalog-info.yaml' ||
+              fileName === 'catalog-info.yml' ||
+              fileName.includes('readme') ||
+              fileName.includes('guide') ||
+              fileName.includes('manual')) {
+            return true;
+          }
+          
+          // PRIORITY 7: Any config files (regardless of depth for comprehensive coverage)
+          if (fileName.includes('config') ||
+              fileName.includes('settings') ||
+              fileName.endsWith('.yml') ||
+              fileName.endsWith('.yaml') ||
+              fileName.endsWith('.toml') ||
+              fileName.endsWith('.ini') ||
+              fileName.endsWith('.conf') ||
+              filePath.includes('config/') ||
+              filePath.includes('configs/') ||
+              filePath.includes('configuration/')) {
+            return true;
+          }
+          
+          // PRIORITY 8: CI/CD and workflow files (any depth)
+          if (filePath.includes('workflow') ||
+              filePath.includes('pipeline') ||
+              filePath.includes('ci-cd') ||
+              filePath.includes('.github/') ||
+              filePath.includes('.gitlab/') ||
+              filePath.includes('jenkins') ||
+              filePath.includes('azure-pipelines')) {
+            return true;
+          }
+          
+          // PRIORITY 9: Infrastructure directories (any depth)
+          if (filePath.includes('infrastructure/') ||
+              filePath.includes('infra/') ||
+              filePath.includes('deploy/') ||
+              filePath.includes('deployment/') ||
+              filePath.includes('k8s/') ||
+              filePath.includes('kubernetes/') ||
+              filePath.includes('helm/') ||
+              filePath.includes('terraform/')) {
+            return true;
+          }
+          
+          return false;
+        });
 
       const filesWithContent = await Promise.all(
         filesToLoadContent.map(async (file: ExistingFile) => {
@@ -588,37 +784,96 @@ export const AiAssistantPage = () => {
 
   // Helper to classify file types
   const classifyFileType = (path: string): ExistingFile['type'] => {
-  const lower = path.toLowerCase();
-  if (lower.includes('dockerfile')) return 'dockerfile';
-  if (lower.match(/\.ya?ml$/) && (lower.includes('workflow') || lower.includes('ci') || lower.includes('pipeline'))) return 'ci-cd';
-  if (lower.match(/\.tf$/) || lower.includes('terraform')) return 'terraform';
-  if (lower.includes('helm') || lower.match(/values\.ya?ml$/) || lower.match(/chart\.ya?ml$/)) return 'helm';
-  return 'other';
+    const lower = path.toLowerCase();
+    const fileName = path.split('/').pop()?.toLowerCase() || '';
+    
+    // Docker files
+    if (fileName === 'dockerfile' || fileName.includes('dockerfile') || lower.includes('docker-compose')) return 'dockerfile';
+    
+    // CI/CD files
+    if (lower.includes('.github/workflows/') || 
+        lower.includes('.gitlab-ci') || 
+        lower.includes('jenkins') ||
+        lower.includes('azure-pipelines') ||
+        lower.includes('buildspec') ||
+        fileName.includes('pipeline') ||
+        fileName.includes('workflow') ||
+        fileName === '.travis.yml' ||
+        fileName === 'circle.yml' ||
+        fileName === '.circleci') return 'ci-cd';
+    
+    // Infrastructure as Code
+    if (lower.match(/\.tf$/) || 
+        lower.match(/\.tfvars$/) ||
+        lower.includes('terraform') ||
+        lower.includes('pulumi') ||
+        fileName.includes('infrastructure') ||
+        fileName.includes('infra')) return 'terraform';
+    
+    // Kubernetes & Helm
+    if (lower.includes('helm') || 
+        lower.includes('k8s') ||
+        lower.includes('kubernetes') ||
+        fileName.match(/values\.ya?ml$/) || 
+        fileName.match(/chart\.ya?ml$/) ||
+        fileName.includes('deployment') ||
+        fileName.includes('service.yaml') ||
+        fileName.includes('ingress.yaml') ||
+        fileName.includes('configmap') ||
+        fileName.includes('secret.yaml')) return 'helm';
+    
+    return 'other';
   };
 
   // Helper to get file icon based on path and type
   const getFileIcon = (path: string, fileType?: ExistingFile['type']) => {
     const lower = path.toLowerCase();
+    const fileName = path.split('/').pop()?.toLowerCase() || '';
     const type = fileType || classifyFileType(path);
     
-    if (type === 'dockerfile' || lower.includes('dockerfile')) {
+    // Docker files
+    if (type === 'dockerfile' || fileName.includes('dockerfile') || fileName.includes('docker-compose')) {
       return <DockerIcon style={{ fontSize: 16, color: '#0db7ed', marginRight: 8 }} />;
     }
-    if (type === 'ci-cd' || lower.includes('workflow') || lower.includes('.github')) {
+    
+    // CI/CD files
+    if (type === 'ci-cd' || lower.includes('workflow') || lower.includes('.github') || 
+        fileName.includes('pipeline') || fileName.includes('jenkins') || fileName.includes('ci')) {
       return <CicdIcon style={{ fontSize: 16, color: '#f39c12', marginRight: 8 }} />;
     }
-    if (type === 'terraform' || lower.endsWith('.tf')) {
+    
+    // Infrastructure as Code
+    if (type === 'terraform' || lower.endsWith('.tf') || lower.includes('terraform') || 
+        fileName.includes('infrastructure') || fileName.includes('infra')) {
       return <TerraformIcon style={{ fontSize: 16, color: '#7c3aed', marginRight: 8 }} />;
     }
-    if (lower.endsWith('.json') || lower.endsWith('.yaml') || lower.endsWith('.yml')) {
+    
+    // Kubernetes/Helm files
+    if (type === 'helm' || lower.includes('helm') || lower.includes('k8s') || 
+        fileName.includes('deployment') || fileName.includes('service.yaml')) {
+      return <TerraformIcon style={{ fontSize: 16, color: '#326ce5', marginRight: 8 }} />;
+    }
+    
+    // Configuration files
+    if (lower.endsWith('.json') || lower.endsWith('.yaml') || lower.endsWith('.yml') ||
+        fileName.includes('config') || fileName === '.env' || fileName.includes('settings') ||
+        fileName === 'package.json' || fileName === 'tsconfig.json') {
       return <ConfigIcon style={{ fontSize: 16, color: '#10b981', marginRight: 8 }} />;
     }
-    if (lower.endsWith('.js') || lower.endsWith('.ts') || lower.endsWith('.tsx') || lower.endsWith('.jsx')) {
+    
+    // Code files
+    if (lower.endsWith('.js') || lower.endsWith('.ts') || lower.endsWith('.tsx') || 
+        lower.endsWith('.jsx') || lower.endsWith('.py') || lower.endsWith('.go') || 
+        lower.endsWith('.java') || lower.endsWith('.cs')) {
       return <CodeFileIcon style={{ fontSize: 16, color: '#fbbf24', marginRight: 8 }} />;
     }
-    if (lower.endsWith('.md') || lower.endsWith('.txt') || lower.endsWith('.rst')) {
+    
+    // Documentation
+    if (lower.endsWith('.md') || lower.endsWith('.txt') || lower.endsWith('.rst') || 
+        fileName === 'readme.md' || fileName.includes('doc')) {
       return <DocumentIcon style={{ fontSize: 16, color: '#64748b', marginRight: 8 }} />;
     }
+    
     return <FileIcon style={{ fontSize: 16, color: '#9ca3af', marginRight: 8 }} />;
   };
 
@@ -1482,6 +1737,31 @@ export const AiAssistantPage = () => {
                       onResponse={handleChatResponse}
                       onFilesGenerated={handleFilesGenerated}
                       onOpenFile={handleOpenFileFromChat}
+                      projectContext={{
+                        githubSecrets: {
+                          GCP_PROJECT_ID: 'Your Google Cloud Project ID',
+                          GCP_REGION: 'Your Google Cloud Region (e.g., us-central1)',
+                          GCP_SA_KEY: 'Your Google Cloud Service Account Key (JSON format)',
+                          OPENWEATHER_API_KEY: 'Your OpenWeather API Key for weather services'
+                        },
+                        instructions: {
+                          codeGeneration: 'Generate production-ready, complete files/scripts that can be used immediately without modification. Use the exact GitHub secret variable names listed above when referencing secrets in CI/CD workflows, deployment scripts, or configuration files.',
+                          contextAwareness: 'You have access to the complete DevOps context of this project including infrastructure files, CI/CD pipelines, configuration files, deployment scripts, and environment settings. Use this context to generate appropriate solutions.',
+                          gcpIntegration: 'When generating GCP-related code (Cloud Run, Cloud Build, IAM, etc.), always use the exact secret names: GCP_PROJECT_ID, GCP_REGION, and GCP_SA_KEY.',
+                          fileFormats: 'Generate complete, properly formatted files including headers, comments, error handling, and best practices. Files should be ready to commit and deploy.',
+                          devopsPattern: 'Follow industry-standard DevOps patterns: infrastructure as code, GitOps workflows, proper secret management, multi-environment support, and comprehensive documentation.'
+                        },
+                        capabilities: [
+                          'Generate complete CI/CD workflows using exact GitHub secret names',
+                          'Create infrastructure as code (Terraform, Helm) with proper configurations',
+                          'Generate deployment scripts and automation tools',
+                          'Create environment-specific configuration files',
+                          'Generate Docker configurations and compose files',
+                          'Create monitoring and logging configurations',
+                          'Generate security and IAM configurations',
+                          'Create complete project documentation and setup guides'
+                        ]
+                      }}
                     />
                   </div>
                 </>
