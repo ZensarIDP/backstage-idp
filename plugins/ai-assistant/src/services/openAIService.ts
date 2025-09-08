@@ -1,5 +1,4 @@
-import OpenAI from 'openai';
-import { configApiRef, useApi } from '@backstage/core-plugin-api';
+import { configApiRef, useApi, discoveryApiRef } from '@backstage/core-plugin-api';
 import { Entity } from '@backstage/catalog-model';
 
 export interface AIRequest {
@@ -29,39 +28,13 @@ export interface AIResponse {
 }
 
 export class OpenAIService {
-  private openai: OpenAI;
   private config: any;
+  private discoveryApi: any;
 
-  constructor(config: any) {
+  constructor(config: any, discoveryApi: any) {
     this.config = config;
-    let apiKey;
-    try {
-      // Try direct string access first (simplified structure)
-      apiKey = config.getString('aiAssistant.openai.apiKey');
-      console.info('[OpenAIService] API key found via direct path');
-    } catch (error) {
-      try {
-        // Try optional string access
-        apiKey = config.getOptionalString('aiAssistant.openai.apiKey');
-        console.info('[OpenAIService] API key found via optional path');
-      } catch (e) {
-        console.error('[OpenAIService] Failed to read API key:', error, e);
-        console.error('[OpenAIService] Available config:', JSON.stringify(config.get('aiAssistant'), null, 2));
-      }
-    }
-    
-    if (!apiKey || apiKey.length < 20) {
-      console.error('[OpenAIService] API key missing or invalid. Length:', apiKey?.length || 0);
-      console.error('[OpenAIService] Expected path: aiAssistant.openai.apiKey');
-      throw new Error('OpenAI API key is missing or invalid. Please check your app-config.yaml.');
-    }
-    
-    this.openai = new OpenAI({
-      apiKey: apiKey,
-      dangerouslyAllowBrowser: true, // Note: In production, calls should go through backend
-    });
-    // Log for troubleshooting
-    console.info('[OpenAIService] Initialized with API key:', apiKey.slice(0, 8) + '...');
+    this.discoveryApi = discoveryApi;
+    console.info('[OpenAIService] Initialized with backend proxy');
   }
 
   async generateResponse(request: AIRequest): Promise<AIResponse> {
@@ -97,18 +70,35 @@ export class OpenAIService {
         requestType: isConversationOnly ? 'CONVERSATION_ONLY' : 'POTENTIAL_FILE_GENERATION'
       });
 
-      const completion = await this.openai.chat.completions.create({
-        model: model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_tokens: maxTokens,
-        temperature: temperature,
+      // Get the backend base URL
+      const backendUrl = await this.discoveryApi.getBaseUrl('ai-assistance-backend');
+      
+      // Call the backend proxy instead of OpenAI directly
+      const response = await fetch(`${backendUrl}/openai/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          max_tokens: maxTokens,
+          temperature: temperature,
+        }),
       });
 
-      const response = completion.choices[0]?.message?.content;
-      if (!response) {
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Backend returned ${response.status}: ${response.statusText}`);
+      }
+
+      const completion = await response.json();
+      const aiResponse = completion.choices[0]?.message?.content;
+      
+      if (!aiResponse) {
         throw new Error('No response from OpenAI');
       }
 
@@ -116,22 +106,24 @@ export class OpenAIService {
       if (isConversationOnly) {
         console.log('[OpenAIService] Conversation-only response - no file parsing');
         return {
-          message: response,
+          message: aiResponse,
           type: 'conversation',
           files: []
         };
       }
 
-      return this.parseAIResponse(response, request);
+      return this.parseAIResponse(aiResponse, request);
     } catch (error: any) {
       // More helpful error message
       let msg = 'Sorry, I encountered an error.';
-      if (error?.status === 401 || error?.status === 403) {
-        msg = 'OpenAI API key is invalid or unauthorized. Please check your key.';
-      } else if (error?.status === 429) {
+      if (error?.message?.includes('401') || error?.message?.includes('403')) {
+        msg = 'OpenAI API key is invalid or unauthorized. Please check your backend configuration.';
+      } else if (error?.message?.includes('429')) {
         msg = 'OpenAI rate limit exceeded. Please wait and try again.';
-      } else if (error?.status === 400) {
+      } else if (error?.message?.includes('400')) {
         msg = 'OpenAI request was malformed. Please check your configuration.';
+      } else if (error?.message?.includes('503')) {
+        msg = 'OpenAI service is not configured in the backend. Please contact your administrator.';
       } else if (error?.message) {
         msg += ' ' + error.message;
       }
@@ -141,6 +133,25 @@ export class OpenAIService {
         type: 'error',
       };
     }
+  }
+
+  private async callBackendOpenAI(requestBody: any): Promise<any> {
+    const backendUrl = await this.discoveryApi.getBaseUrl('ai-assistance-backend');
+    
+    const response = await fetch(`${backendUrl}/openai/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Backend returned ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
   }
 
   private buildSystemPrompt(request: AIRequest, isConversationOnly: boolean = false): string {
@@ -458,7 +469,7 @@ User Request: ${request}`;
         hasFiles: !!(existingFiles && Object.keys(existingFiles).length > 0)
       });
 
-      const completion = await this.openai.chat.completions.create({
+      const completion = await this.callBackendOpenAI({
         model: model,
         messages: [
           { role: 'system', content: systemPrompt },
@@ -710,7 +721,7 @@ User Request: ${request}`;
         historyLength: conversationHistory ? conversationHistory.length : 0
       });
 
-      const completion = await this.openai.chat.completions.create({
+      const completion = await this.callBackendOpenAI({
         model: model,
         messages: messages,
         max_tokens: maxTokens,
@@ -783,5 +794,6 @@ User Request: ${request}`;
 
 export const useOpenAIService = () => {
   const config = useApi(configApiRef);
-  return new OpenAIService(config);
+  const discoveryApi = useApi(discoveryApiRef);
+  return new OpenAIService(config, discoveryApi);
 };

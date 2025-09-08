@@ -45,6 +45,11 @@ backend:
     client: better-sqlite3
     connection: ':memory:'
 
+# AI Configuration for backend services
+ai:
+  openai:
+    apiKey: "${OPENAI_API_KEY}"
+
 integrations:
   github:
     - host: github.com

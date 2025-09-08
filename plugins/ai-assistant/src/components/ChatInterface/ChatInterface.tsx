@@ -5,7 +5,7 @@ import {
   CircularProgress,
 } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
-import { useApi, configApiRef } from '@backstage/core-plugin-api';
+import { useApi, configApiRef, discoveryApiRef } from '@backstage/core-plugin-api';
 import {
   Send as SendIcon,
   Refresh as RegenerateIcon,
@@ -354,6 +354,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 }) => {
   const classes = useStyles();
   const configApi = useApi(configApiRef);
+  const discoveryApi = useApi(discoveryApiRef);
   const [messages, setMessages] = useState<Message[]>([]);
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFile[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -365,7 +366,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   useEffect(() => {
     const initOpenAI = () => {
       try {
-        const service = new OpenAIService(configApi);
+        const service = new OpenAIService(configApi, discoveryApi);
         setOpenAIService(service);
       } catch (error) {
         console.error('Failed to initialize OpenAI service:', error);
@@ -373,7 +374,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     };
     
     initOpenAI();
-  }, [configApi]);
+  }, [configApi, discoveryApi]);
 
   // Helper function to extract files from context response
   // File memory management functions

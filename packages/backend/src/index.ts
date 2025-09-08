@@ -68,4 +68,5 @@ backend.add(import('@backstage/plugin-search-backend-module-techdocs'));
 backend.add(import('@backstage/plugin-kubernetes-backend'));
 
 
+backend.add(import('@internal/plugin-ai-assistance-backend-backend'));
 backend.start();
