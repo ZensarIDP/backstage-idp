@@ -1138,7 +1138,7 @@ PREDEFINED TEMPLATE ENHANCEMENT:
             fullWidth
             multiline
             maxRows={3} // Reduced from 4 to 3
-            placeholder="Ask ZenOps AI or use predefined prompts"
+            placeholder="Ask ZenOps AI"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={(e) => {

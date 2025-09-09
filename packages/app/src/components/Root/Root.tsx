@@ -26,6 +26,7 @@ import {
 } from '@backstage/core-components';
 import MenuIcon from '@material-ui/icons/Menu';
 import SearchIcon from '@material-ui/icons/Search';
+import BugReportIcon from '@material-ui/icons/BugReport';
 import { MyGroupsSidebarItem } from '@backstage/plugin-org';
 import GroupIcon from '@material-ui/icons/People';
 
@@ -75,6 +76,7 @@ export const Root = ({ children }: PropsWithChildren<{}>) => (
         />
         <SidebarItem icon={ExtensionIcon} to="api-docs" text="APIs" />
         <SidebarItem icon={LibraryBooks} to="docs" text="Docs" />
+        <SidebarItem icon={BugReportIcon} to="jira" text="Issues/Tickets" />
         <SidebarItem icon={BubbleChartIcon} to="ai-assistant" text="ZenOps AI" />
         <SidebarItem icon={CreateComponentIcon} to="create" text="Create..." />
         {/* End global nav */}

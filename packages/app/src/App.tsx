@@ -37,6 +37,7 @@ import { CatalogGraphPage } from '@backstage/plugin-catalog-graph';
 import { RequirePermission } from '@backstage/plugin-permission-react';
 import { catalogEntityCreatePermission } from '@backstage/plugin-catalog-common/alpha';
 import { AiAssistantPage } from '@internal/plugin-ai-assistant';
+import { JiraPage } from '@internal/plugin-jira';
 
 const app = createApp({
   apis,
@@ -97,6 +98,7 @@ const routes = (
     <Route path="/settings" element={<UserSettingsPage />} />
     <Route path="/catalog-graph" element={<CatalogGraphPage />} />
     <Route path="/ai-assistant" element={<AiAssistantPage />} />
+    <Route path="/jira" element={<JiraPage />} />
   </FlatRoutes>
 );
 

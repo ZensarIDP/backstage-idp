@@ -50,6 +50,12 @@ ai:
   openai:
     apiKey: "${OPENAI_API_KEY}"
 
+# Jira integration configuration
+jira:
+  baseUrl: "${JIRA_BASE_URL}" # e.g., https://your-company.atlassian.net
+  email: "${JIRA_EMAIL}"      # Your Jira email address
+  apiToken: "${JIRA_API_TOKEN}" # Your Jira API token
+
 integrations:
   github:
     - host: github.com
