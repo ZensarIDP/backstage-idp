@@ -41,6 +41,48 @@ export class OpenAIService {
     }
   }
 
+  async generatePredefinedPromptResponse(promptId: string, template: string, systemPrompt: string, userInput?: string): Promise<any> {
+    if (!this.client) {
+      throw new Error('OpenAI service is not configured. Please set ai.openai.apiKey in your configuration.');
+    }
+
+    try {
+      this.logger.info(`Making predefined prompt request to OpenAI API for prompt: ${promptId}`);
+      
+      // Construct the enhanced prompt
+      const enhancedPrompt = userInput 
+        ? `${template}\n\nAdditional requirements: ${userInput}`
+        : template;
+
+      // Create optimized request for predefined prompts
+      const requestBody = {
+        model: 'gpt-4',
+        messages: [
+          {
+            role: 'system' as const,
+            content: systemPrompt
+          },
+          {
+            role: 'user' as const,
+            content: enhancedPrompt
+          }
+        ],
+        temperature: 0.3, // Lower temperature for more consistent results
+        max_tokens: 3000, // Higher token limit for comprehensive responses
+        presence_penalty: 0.1,
+        frequency_penalty: 0.1
+      };
+
+      const response = await this.client.chat.completions.create(requestBody);
+      
+      this.logger.info(`Successfully received predefined prompt response from OpenAI API for prompt: ${promptId}`);
+      return response;
+    } catch (error) {
+      this.logger.error(`Error calling OpenAI API for predefined prompt ${promptId}:`, error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
+  }
+
   isConfigured(): boolean {
     return this.client !== null;
   }

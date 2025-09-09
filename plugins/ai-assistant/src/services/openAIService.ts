@@ -39,27 +39,34 @@ export class OpenAIService {
 
   async generateResponse(request: AIRequest): Promise<AIResponse> {
     try {
+      // Check if this is a predefined template request - FORCE FILE GENERATION
+      const isPredefinedTemplate = request.context?.includes('PREDEFINED_TEMPLATE') ||
+                                   request.context?.includes('FORCE FILE GENERATION');
+
       // Check if this is a conversation-only request (analysis, summary, explanation)
-      const isConversationOnly = request.prompt.toLowerCase().includes('summarize') ||
-                                 request.prompt.toLowerCase().includes('summary') ||
-                                 request.prompt.toLowerCase().includes('what does') ||
-                                 request.prompt.toLowerCase().includes('explain') ||
-                                 request.prompt.toLowerCase().includes('analyze') ||
-                                 request.prompt.toLowerCase().includes('check') ||
-                                 request.prompt.toLowerCase().includes('review') ||
-                                 request.prompt.toLowerCase().includes('describe') ||
-                                 request.prompt.toLowerCase().includes('tell me') ||
-                                 request.prompt.toLowerCase().includes('where does') ||
-                                 request.prompt.toLowerCase().includes('how does') ||
-                                 request.prompt.toLowerCase().includes('what is') ||
-                                 request.prompt.toLowerCase().includes('why does');
+      // BUT override for predefined templates
+      const isConversationOnly = !isPredefinedTemplate && (
+        request.prompt.toLowerCase().includes('summarize') ||
+        request.prompt.toLowerCase().includes('summary') ||
+        request.prompt.toLowerCase().includes('what does') ||
+        request.prompt.toLowerCase().includes('explain') ||
+        request.prompt.toLowerCase().includes('analyze') ||
+        request.prompt.toLowerCase().includes('check') ||
+        request.prompt.toLowerCase().includes('review') ||
+        request.prompt.toLowerCase().includes('describe') ||
+        request.prompt.toLowerCase().includes('tell me') ||
+        request.prompt.toLowerCase().includes('where does') ||
+        request.prompt.toLowerCase().includes('how does') ||
+        request.prompt.toLowerCase().includes('what is') ||
+        request.prompt.toLowerCase().includes('why does')
+      );
 
       const systemPrompt = this.buildSystemPrompt(request, isConversationOnly);
       const userPrompt = this.buildUserPrompt(request);
 
       const model = this.config.getOptionalString('aiAssistant.openai.model') || 'gpt-4o';
-      const maxTokens = this.config.getOptionalNumber('aiAssistant.openai.maxTokens') || 2000;
-      const temperature = this.config.getOptionalNumber('aiAssistant.openai.temperature') || 0.3;
+      const maxTokens = this.config.getOptionalNumber('aiAssistant.openai.maxTokens') || (isPredefinedTemplate ? 4000 : 2000);
+      const temperature = this.config.getOptionalNumber('aiAssistant.openai.temperature') || (isPredefinedTemplate ? 0.2 : 0.3);
 
       // Log request for troubleshooting
       console.info('[OpenAIService] generateResponse:', { 
@@ -67,7 +74,9 @@ export class OpenAIService {
         maxTokens, 
         temperature, 
         isConversationOnly,
-        requestType: isConversationOnly ? 'CONVERSATION_ONLY' : 'POTENTIAL_FILE_GENERATION'
+        isPredefinedTemplate,
+        requestType: isPredefinedTemplate ? 'PREDEFINED_TEMPLATE_FORCE_FILES' : 
+                    (isConversationOnly ? 'CONVERSATION_ONLY' : 'POTENTIAL_FILE_GENERATION')
       });
 
       // Get the backend base URL
@@ -102,8 +111,8 @@ export class OpenAIService {
         throw new Error('No response from OpenAI');
       }
 
-      // For conversation-only requests, return simple conversation response
-      if (isConversationOnly) {
+      // For conversation-only requests (but NOT predefined templates), return simple conversation response
+      if (isConversationOnly && !isPredefinedTemplate) {
         console.log('[OpenAIService] Conversation-only response - no file parsing');
         return {
           message: aiResponse,
@@ -364,7 +373,11 @@ Always respond in JSON format:
         devopsPattern: string;
       };
       capabilities: string[];
-    }
+    },
+    conversationHistory?: Array<{
+      role: 'user' | 'assistant';
+      content: string;
+    }>
   ): Promise<string> {
     console.log('[OpenAIService] generateFileAnalysis called:', {
       requestLength: request.length,
@@ -469,12 +482,24 @@ User Request: ${request}`;
         hasFiles: !!(existingFiles && Object.keys(existingFiles).length > 0)
       });
 
+      // Build messages array with conversation history for context
+      const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        { role: 'system', content: systemPrompt }
+      ];
+
+      // Add conversation history if provided for context
+      if (conversationHistory && conversationHistory.length > 0) {
+        // Add recent conversation history (last 6 messages to maintain context)
+        const recentHistory = conversationHistory.slice(-6);
+        messages.push(...recentHistory);
+      }
+
+      // Add the current request
+      messages.push({ role: 'user', content: request });
+
       const completion = await this.callBackendOpenAI({
         model: model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: request }
-        ],
+        messages: messages,
         max_tokens: maxTokens,
         temperature: temperature,
       });

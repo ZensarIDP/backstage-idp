@@ -3,6 +3,8 @@ import {
   TextField,
   Button,
   CircularProgress,
+  IconButton,
+  Tooltip,
 } from '@material-ui/core';
 import { makeStyles } from '@material-ui/core/styles';
 import { useApi, configApiRef, discoveryApiRef } from '@backstage/core-plugin-api';
@@ -14,9 +16,12 @@ import {
   Settings as ModifyIcon,
   InsertDriveFile as FileIcon,
   FolderOpen as OpenIcon,
+  ExpandLess as PromptsIcon,
 } from '@material-ui/icons';
 import { OpenAIService } from '../../services/openAIService';
 import { intentClassificationService } from '../../services/intentClassificationService';
+import { PredefinedPromptsDrawer } from '../PredefinedPromptsPanel';
+import { PredefinedPrompt, PredefinedPromptsService } from '../../services/predefinedPromptsService';
 
 const useStyles = makeStyles(() => ({
   chatContainer: {
@@ -26,6 +31,7 @@ const useStyles = makeStyles(() => ({
     backgroundColor: '#1e1e1e',
     color: '#cccccc',
     fontFamily: '"Segoe UI", "Helvetica Neue", Arial, sans-serif',
+    position: 'relative', // Add relative positioning for the drawer
   },
   messagesContainer: {
     flex: 1,
@@ -109,6 +115,7 @@ const useStyles = makeStyles(() => ({
     display: 'flex',
     flexDirection: 'column',
     gap: 6, // Reduced from 8px to 6px
+    position: 'relative', // Add relative positioning for button
   },
   inputWrapper: {
     display: 'flex',
@@ -152,6 +159,29 @@ const useStyles = makeStyles(() => ({
     '&:disabled': {
       backgroundColor: '#2d2d30',
       color: '#656565',
+    },
+  },
+  promptsButton: {
+    position: 'absolute',
+    top: -45,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    minWidth: 40,
+    height: 32,
+    backgroundColor: '#252526',
+    color: '#cccccc',
+    border: '1px solid #464647',
+    borderRadius: '8px 8px 0 0',
+    zIndex: 1001,
+    transition: 'all 0.3s ease',
+    '&:hover': {
+      backgroundColor: '#2a2d2e',
+      borderColor: '#007fd4',
+    },
+    '&.active': {
+      backgroundColor: '#007acc',
+      borderColor: '#007acc',
+      color: '#ffffff',
     },
   },
   avatar: {
@@ -359,6 +389,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [generatedFiles, setGeneratedFiles] = useState<GeneratedFile[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
+  const [promptsDrawerOpen, setPromptsDrawerOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [openAIService, setOpenAIService] = useState<OpenAIService | null>(null);
 
@@ -666,12 +697,18 @@ const extractFilesFromContextResponse = (response: string): Array<{path: string,
           }
         });
         
-        // Use analysis-specific AI service call
+        // Use analysis-specific AI service call with conversation history
+        const conversationHistory = messages.map(msg => ({
+          role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
+          content: msg.content
+        }));
+        
         const analysisResponse = await openAIService.generateFileAnalysis(
           content,
           repository.entity,
           analysisContext,
-          projectContext
+          projectContext,
+          conversationHistory // Pass converted conversation history for context
         );
         
         response = {
@@ -749,6 +786,159 @@ const extractFilesFromContextResponse = (response: string): Array<{path: string,
         message: "I encountered an error while processing your request. Please try again or check your OpenAI configuration.",
         type: 'error',
       };
+    }
+  };
+
+  const handlePredefinedPromptSelect = async (prompt: PredefinedPrompt) => {
+    // Format the prompt for AI with structured template
+    const formattedPrompt = PredefinedPromptsService.formatPromptForAI(prompt.id);
+    if (!formattedPrompt) {
+      console.error('Failed to format predefined prompt');
+      return;
+    }
+
+    // Add user message showing ONLY the selected prompt title
+    const userMessage: Message = {
+      id: `user-${Date.now()}`,
+      content: `Selected: ${prompt.title}`,
+      sender: 'user',
+      timestamp: new Date(),
+    };
+
+    // Add thinking message immediately for loading state
+    const thinkingMessage: Message = {
+      id: `thinking-${Date.now()}`,
+      content: '',
+      sender: 'ai',
+      timestamp: new Date(),
+      thinking: true,
+    };
+
+    setMessages(prev => [...prev, userMessage, thinkingMessage]);
+    setLoading(true);
+
+    try {
+      if (!openAIService) {
+        throw new Error('OpenAI service not initialized');
+      }
+
+      // Create enhanced prompt that FORCES file generation
+      // Format the predefined prompt with enhanced context
+      const enhancedPrompt = `${formattedPrompt.systemPrompt}
+
+${formattedPrompt.userPrompt}
+
+PREDEFINED TEMPLATE ENHANCEMENT:
+- Template: ${prompt.title}
+- This is a specialized DevOps workflow template with curated best practices
+- Repository: "${repository.name}" on branch "${branch}"
+- Current structure: ${existingFiles?.map(f => f.path).join(', ') || 'basic structure'}
+- Generate production-ready, complete code files following best practices`;
+
+      console.log('[PredefinedPrompt] Using context-aware generation like normal prompts:', {
+        promptId: prompt.id,
+        title: prompt.title,
+        requestType: 'CONTEXT_AWARE_GENERATION'
+      });
+
+      // Get existing files context like normal prompts
+      const existingFilesContext = existingFiles?.reduce((acc, file) => {
+        acc[file.path] = file.content || '';
+        return acc;
+      }, {} as { [key: string]: string }) || {};
+
+      // Get project context like normal prompts
+      const projectContext = {
+        githubSecrets: {},
+        instructions: {
+          codeGeneration: 'Generate production-ready code with best practices',
+          contextAwareness: 'Consider existing project structure and files',
+          gcpIntegration: 'Include GCP service configurations when applicable',
+          fileFormats: 'Use appropriate file extensions and naming conventions',
+          devopsPattern: 'Follow DevOps best practices and patterns'
+        },
+        capabilities: ['terraform', 'github-actions', 'docker', 'gcp']
+      };
+
+      // Get conversation history like normal prompts
+      const conversationHistory = messages
+        .filter(msg => msg.sender === 'user' || msg.sender === 'ai')
+        .slice(-5) // Last 5 messages for context
+        .map(msg => ({
+          role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
+          content: msg.content
+        }));
+
+      // Get generated files context for file memory
+      const generatedFilesContext = getGeneratedFileContext();
+
+      // Use the same context-aware generation as normal prompts, but with predefined enhancement
+      const contextResponse = await openAIService.generateCodeWithContext(
+        enhancedPrompt,
+        repository.entity,
+        existingFilesContext,
+        projectContext,
+        conversationHistory,
+        generatedFilesContext
+      );
+
+      // Parse the context response for files (same as normal prompts)
+      const files = extractFilesFromContextResponse(contextResponse);
+      const messageText = extractMessageFromContextResponse(contextResponse);
+
+      // Update generated files memory
+      files.forEach(file => {
+        addOrUpdateGeneratedFile(file);
+      });
+
+      const response = {
+        message: messageText,
+        type: files.length > 0 ? 'file_generation' : 'conversation',
+        files: files,
+      };
+
+      // Create assistant message like normal prompts do
+      const assistantMessage: Message = {
+        id: `assistant-${Date.now()}`,
+        content: response.message,
+        sender: 'ai',
+        timestamp: new Date(),
+        files: response.files,
+      };
+
+      // Remove thinking message and add response message (same as normal prompts)
+      setMessages(prev => prev.filter(msg => !msg.thinking).concat(assistantMessage));
+
+      // Call onResponse like normal prompts do - pass the entire response object
+      if (onResponse) {
+        onResponse(response);
+      }
+
+      // Handle generated files - trigger the enhanced preview like normal prompts
+      if (response.files && response.files.length > 0) {
+        console.log('[PredefinedPrompt] Files generated:', response.files.length);
+        
+        if (onFilesGenerated) {
+          onFilesGenerated(response.files, { prompt: prompt.title, timestamp: new Date() });
+        }
+      } else {
+        console.warn('[PredefinedPrompt] No files generated in response');
+      }
+    } catch (error) {
+      console.error('Error with predefined prompt:', error);
+      
+      // Remove thinking message
+      setMessages(prev => prev.filter(msg => !msg.thinking));
+      
+      const errorMessage: Message = {
+        id: `error-${Date.now()}`,
+        content: 'Sorry, I encountered an error processing this predefined prompt. Please try again.',
+        sender: 'ai',
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -933,12 +1123,22 @@ const extractFilesFromContextResponse = (response: string): Array<{path: string,
       </div>
 
       <div className={classes.inputContainer}>
-        <div className={classes.inputWrapper}>
+        <Tooltip title="DevOps Prompts">
+          <IconButton
+            className={`${classes.promptsButton} ${promptsDrawerOpen ? 'active' : ''}`}
+            onClick={() => setPromptsDrawerOpen(!promptsDrawerOpen)}
+            disabled={loading}
+          >
+            <PromptsIcon style={{ transform: promptsDrawerOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s ease' }} />
+          </IconButton>
+        </Tooltip>
+        
+        <div className={classes.inputWrapper}>          
           <TextField
             fullWidth
             multiline
             maxRows={3} // Reduced from 4 to 3
-            placeholder="Ask ZenOps AI"
+            placeholder="Ask ZenOps AI or use predefined prompts"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={(e) => {
@@ -968,6 +1168,12 @@ const extractFilesFromContextResponse = (response: string): Array<{path: string,
           </Button>
         </div>
       </div>
+
+      <PredefinedPromptsDrawer
+        open={promptsDrawerOpen}
+        onClose={() => setPromptsDrawerOpen(false)}
+        onPromptSelect={handlePredefinedPromptSelect}
+      />
     </div>
   );
 };
