@@ -5,6 +5,7 @@ import ExtensionIcon from '@material-ui/icons/Extension';
 import LibraryBooks from '@material-ui/icons/LibraryBooks';
 import CreateComponentIcon from '@material-ui/icons/AddCircleOutline';
 import BubbleChartIcon from '@material-ui/icons/BubbleChart';
+import CloudIcon from '@material-ui/icons/Cloud';
 import LogoFull from './LogoFull';
 import LogoIcon from './LogoIcon';
 import {
@@ -79,6 +80,7 @@ export const Root = ({ children }: PropsWithChildren<{}>) => (
         <SidebarItem icon={BugReportIcon} to="jira" text="Issues/Tickets" />
         <SidebarItem icon={BubbleChartIcon} to="ai-assistant" text="ZenOps AI" />
         <SidebarItem icon={CreateComponentIcon} to="create" text="Create..." />
+        <SidebarItem icon={CloudIcon} to="self_service_actions" text="Self-Service" />
         {/* End global nav */}
         <SidebarDivider />
         <SidebarScrollWrapper>

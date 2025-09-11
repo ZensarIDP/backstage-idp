@@ -38,6 +38,7 @@ import { RequirePermission } from '@backstage/plugin-permission-react';
 import { catalogEntityCreatePermission } from '@backstage/plugin-catalog-common/alpha';
 import { AiAssistantPage } from '@internal/plugin-ai-assistant';
 import { JiraPage } from '@internal/plugin-jira';
+import SelfServicePage from './components/UserDefined/SelfServiceActions';
 
 const app = createApp({
   apis,
@@ -84,6 +85,7 @@ const routes = (
     </Route>
     <Route path="/create" element={<ScaffolderPage />} />
     <Route path="/api-docs" element={<ApiExplorerPage />} />
+    <Route path="/self_service_actions" element={<SelfServicePage/>}/>
     <Route
       path="/catalog-import"
       element={

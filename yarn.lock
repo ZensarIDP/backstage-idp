@@ -8033,11 +8033,11 @@ __metadata:
     "@backstage/errors": "npm:^1.2.7"
     "@backstage/plugin-catalog-node": "npm:^1.17.2"
     "@types/express": "npm:^4.17.6"
-    "@types/node-fetch": "npm:^2.6.0"
+    "@types/node-fetch": "npm:^2.6.11"
     "@types/supertest": "npm:^2.0.12"
     express: "npm:^4.17.1"
     express-promise-router: "npm:^4.1.0"
-    node-fetch: "npm:^2.6.0"
+    node-fetch: "npm:^2.7.0"
     supertest: "npm:^6.2.4"
     zod: "npm:^3.22.4"
   languageName: unknown
@@ -15720,7 +15720,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node-fetch@npm:^2.6.0, @types/node-fetch@npm:^2.6.9":
+"@types/node-fetch@npm:^2.6.11, @types/node-fetch@npm:^2.6.9":
   version: 2.6.13
   resolution: "@types/node-fetch@npm:2.6.13"
   dependencies:

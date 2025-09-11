@@ -129,6 +129,27 @@ catalog:
       rules:
         - allow: [Template]
 
+    # AWS Infrastructure Templates (Self-Service)
+    - type: file
+      target: ../../templates/aws-s3-provisioner/template.yaml
+      rules:
+        - allow: [Template]
+    
+    - type: file
+      target: ../../templates/aws-ec2-provisioner/template.yaml
+      rules:
+        - allow: [Template]
+        
+    - type: file
+      target: ../../templates/aws-ec2-scripts-executer/template.yaml
+      rules:
+        - allow: [Template]
+        
+    - type: file
+      target: ../../templates/aws-iam-provisioner/template.yaml
+      rules:
+        - allow: [Template]
+
     # Local example organizational data
     - type: file
       target: ../../examples/org.yaml

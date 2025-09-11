@@ -1,0 +1,12 @@
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  name: aws-infrastructure-templates
+  description: Templates for provisioning AWS infrastructure
+spec:
+  type: file
+  targets:
+    - ./aws-s3-provisioner/template.yaml
+    - ./aws-ec2-provisioner/template.yaml
+    - ./aws-ec2-scripts-executer/template.yaml
+    - ./aws-iam-provisioner/template.yaml
