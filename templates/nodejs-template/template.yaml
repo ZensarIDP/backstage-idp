@@ -12,36 +12,43 @@ spec:
   owner: platform-team
   type: service
   parameters:
-    - title: Provide some simple information
+    - title: 📝 Application Details
+      description: Provide basic information about your Node.js service. This information will be used to configure your project and repository.
       required:
         - component_id
         - owner
       properties:
         component_id:
-          title: Name
+          title: 🏷️ Service Name
           type: string
-          description: Unique name of the component
+          description: Unique identifier for your service (will be used as repository name)
           pattern: '^([a-z0-9\-]+)$'
+          ui:help: "Use lowercase letters, numbers, and hyphens only. No spaces or special characters."
         description:
-          title: Description
+          title: 📄 Description
           type: string
-          description: Help others understand what this service is for.
+          description: Brief description of what this service does (will appear in README and catalog)
+          ui:widget: textarea
+          ui:options:
+            rows: 3
         owner:
-          title: Owner
+          title: 👥 Team Owner
           type: string
-          description: Owner of the component
+          description: Select the team or group that will own and maintain this service
           ui:field: OwnerPicker
           ui:options:
             catalogFilter:
               kind: Group
 
-    - title: Choose a location
+    - title: 📂 Source Code Management
+      description: Configure where your code will be stored. Select your repository provider and organization.
       required:
         - repoUrl
       properties:
         repoUrl:
-          title: Repository Location
+          title: 🏠 Repository Location
           type: string
+          description: Choose where to create your new repository
           ui:field: RepoUrlPicker
           ui:options:
             allowedHosts:
@@ -49,132 +56,160 @@ spec:
             allowedOwners:
               - ZensarIDP
 
-    - title: Cloud Configuration
+    - title: ☁️ Cloud Provider Configuration
+      description: Configure your cloud infrastructure settings. Select your preferred cloud provider and basic project configuration.
       required:
-        - deploymentType
+        - cloudProvider
         - project_id
-        - region
       properties:
-        project_id:
-          title: Google Cloud Project ID
-          type: string
-          description: Your Google Cloud Project ID
-          default: dev-zephyr-352206
-        region:
-          title: Google Cloud Region
-          type: string
-          description: Primary region for your resources
-          default: asia-south1
-          enum:
-            - asia-south1
-            - us-central1
-            - europe-west1
-            - us-east1
-          enumNames:
-            - Asia South 1 (Mumbai)
-            - US Central 1 (Iowa)
-            - Europe West 1 (Belgium)
-            - US East 1 (South Carolina)
         cloudProvider:
-          title: Cloud Provider
+          title: 🏢 Cloud Service Provider
           type: string
-          description: Select your cloud provider
+          description: Select your cloud provider for hosting the application
           default: gcp
           enum:
             - gcp
           enumNames:
-            - Google Cloud Platform
-          ui:widget: radio
-        deploymentType:
-          title: Deployment Type
+            - Google Cloud Platform (GCP)
+        project_id:
+          title: 📋 Google Cloud Project ID
           type: string
-          description: Choose how you want to deploy your application
+          description: Your Google Cloud Project ID where resources will be created
+          default: dev-zephyr-352206
+
+    - title: 🚀 Deployment Target Configuration
+      description: Choose how and where you want to deploy your application. Different deployment types offer various benefits in terms of scalability and management.
+      required:
+        - deploymentType
+      properties:
+        deploymentType:
+          title: 🎯 Deployment Type
+          type: string
+          description: Choose your preferred deployment strategy
           default: cloudrun
           enum:
             - cloudrun
             - gke
           enumNames:
-            - Cloud Run (Serverless)
-            - Google Kubernetes Engine (GKE)
-          ui:widget: radio
-        gkeClusterName:
-          title: GKE Cluster Name
-          type: string
-          description: Name of the existing GKE cluster
-          default: zenhotel-cluster
-          ui:options:
-            condition:
-              properties:
+            - Cloud Run (Serverless - Fully managed, auto-scaling)
+            - Google Kubernetes Engine (GKE - Container orchestration, more control)
+      dependencies:
+        deploymentType:
+          oneOf:
+            - properties:
+                deploymentType:
+                  const: cloudrun
+                region:
+                  title: 🌍 Cloud Run Region
+                  type: string
+                  description: Select the primary region for your Cloud Run service deployment
+                  default: asia-east1
+                  enum:
+                    - asia-south1
+                    - us-central1
+                    - europe-west1
+                    - us-east1
+                  enumNames:
+                    - 🇮🇳 Asia South 1 (Mumbai) - Low latency for India/South Asia
+                    - 🇺🇸 US Central 1 (Iowa) - Balanced US coverage
+                    - 🇪🇺 Europe West 1 (Belgium) - GDPR compliant EU region
+                    - 🇺🇸 US East 1 (South Carolina) - Low latency for US East Coast
+              required:
+                - region
+            - properties:
                 deploymentType:
                   const: gke
-        gkeRegion:
-          title: GKE Region
-          type: string
-          description: Region where the GKE cluster is located
-          default: asia-south1
-          ui:options:
-            condition:
-              properties:
-                deploymentType:
-                  const: gke
-        gkeNamespace:
-          title: GKE Namespace
-          type: string
-          description: Kubernetes namespace for deployment
-          default: default
-          ui:options:
-            condition:
-              properties:
-                deploymentType:
-                  const: gke
+                gkeClusterName:
+                  title: ⚓ GKE Cluster Name
+                  type: string
+                  description: Name of your existing Google Kubernetes Engine cluster
+                  default: zen-idp-cluster
+                gkeRegion:
+                  title: 🌍 GKE Cluster Region
+                  type: string
+                  description: Region/Zone where your GKE cluster is located
+                  default: asia-east1-a
+                  enum:
+                    - asia-east1-a
+                    - asia-south1-a
+                    - us-central1-a
+                    - europe-west1-a
+                    - us-east1-a
+                  enumNames:
+                    - 🇹🇼 Asia East 1-A (Taiwan) - Low latency for Asia Pacific
+                    - 🇮🇳 Asia South 1-A (Mumbai) - Low latency for India/South Asia
+                    - 🇺🇸 US Central 1-A (Iowa) - Balanced US coverage
+                    - 🇪🇺 Europe West 1-A (Belgium) - GDPR compliant EU region
+                    - 🇺🇸 US East 1-A (South Carolina) - Low latency for US East Coast
+                gkeNamespace:
+                  title: 📦 Kubernetes Namespace
+                  type: string
+                  description: Kubernetes namespace where your application will be deployed
+                  default: default
+                  pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+              required:
+                - gkeClusterName
+                - gkeRegion
+                - gkeNamespace
 
-    - title: Database Configuration (Optional)
+    - title: 🗄️ Database Configuration
+      description: Configure database settings for your application. You can choose to include a database or skip this step if your service doesn't require persistent storage.
       properties:
         setupDatabase:
-          title: Setup Database
+          title: 📊 Do you need a database?
           type: boolean
-          description: Do you want to setup a database?
+          description: Select whether your application requires a database for persistent data storage
           default: false
-          ui:widget: checkbox
-        databaseType:
-          title: Database Type
-          type: string
-          description: Choose your database type
-          default: mysql
-          enum:
-            - mysql
-            - postgresql
-          enumNames:
-            - MySQL
-            - PostgreSQL
           ui:widget: radio
           ui:options:
-            condition:
-              properties:
+            radioStyle: vertical
+          enum:
+            - true
+            - false
+          enumNames:
+            - "✅ Yes, I need a database"
+            - "❌ No, my service doesn't need a database"
+      dependencies:
+        setupDatabase:
+          oneOf:
+            - properties:
+                setupDatabase:
+                  const: false
+            - properties:
                 setupDatabase:
                   const: true
-        dbName:
-          title: Database Name
-          type: string
-          description: Name of the database
-          default: appdb
-          pattern: '^[a-z][a-z0-9_]*$'
-          ui:options:
-            condition:
-              properties:
-                setupDatabase:
-                  const: true
-        dbUser:
-          title: Database Username
-          type: string
-          description: Username for database access
-          default: appuser
-          pattern: '^[a-z][a-z0-9_]*$'
-          ui:options:
-            condition:
-              properties:
-                setupDatabase:
-                  const: true
+                databaseType:
+                  title: 🏗️ Database Type
+                  type: string
+                  description: Choose your preferred database engine
+                  default: mysql
+                  enum:
+                    - mysql
+                    - postgresql
+                  enumNames:
+                    - 🐬 MySQL - Popular, reliable, great for web applications
+                    - 🐘 PostgreSQL - Advanced features, excellent for complex queries
+                  ui:widget: radio
+                  ui:options:
+                    radioStyle: vertical
+                dbName:
+                  title: 📋 Database Name
+                  type: string
+                  description: Name of the database that will be created
+                  default: appdb
+                  pattern: '^[a-z][a-z0-9_]*$'
+                  ui:help: "Use lowercase letters, numbers, and underscores only. Must start with a letter."
+                dbUser:
+                  title: 👤 Database Username
+                  type: string
+                  description: Username for database access (application user)
+                  default: appuser
+                  pattern: '^[a-z][a-z0-9_]*$'
+                  ui:help: "Use lowercase letters, numbers, and underscores only. Must start with a letter."
+              required:
+                - databaseType
+                - dbName
+                - dbUser
 
   steps:
     - id: template
@@ -227,6 +262,11 @@ spec:
         repoUrl: ${{ parameters.repoUrl }}
         defaultBranch: main
         repoVisibility: public
+        protectDefaultBranch: false
+        gitCommitMessage: 'Initial commit'
+        gitAuthorName: 'Backstage Scaffolder'
+        gitAuthorEmail: 'scaffolder@backstage.io'
+
 
     - id: register-github
       name: Register in Catalog (GitHub)

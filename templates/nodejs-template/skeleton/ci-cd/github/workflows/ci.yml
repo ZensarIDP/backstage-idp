@@ -140,8 +140,13 @@ jobs:
           echo "🔨 Building Docker image..."
           docker build -t ${{ '${{' }} env.REGION }}-docker.pkg.dev/${{ '${{' }} env.PROJECT_ID }}/${{ '${{' }} env.IMAGE_NAME }}/${{ '${{' }} env.IMAGE_NAME }}:${{ '${{' }} github.sha }} .
           
+          # Also tag as latest for easier deployment
+          docker tag ${{ '${{' }} env.REGION }}-docker.pkg.dev/${{ '${{' }} env.PROJECT_ID }}/${{ '${{' }} env.IMAGE_NAME }}/${{ '${{' }} env.IMAGE_NAME }}:${{ '${{' }} github.sha }} \
+            ${{ '${{' }} env.REGION }}-docker.pkg.dev/${{ '${{' }} env.PROJECT_ID }}/${{ '${{' }} env.IMAGE_NAME }}/${{ '${{' }} env.IMAGE_NAME }}:latest
+          
           echo "📤 Pushing Docker image to Artifact Registry..."
           docker push ${{ '${{' }} env.REGION }}-docker.pkg.dev/${{ '${{' }} env.PROJECT_ID }}/${{ '${{' }} env.IMAGE_NAME }}/${{ '${{' }} env.IMAGE_NAME }}:${{ '${{' }} github.sha }}
+          docker push ${{ '${{' }} env.REGION }}-docker.pkg.dev/${{ '${{' }} env.PROJECT_ID }}/${{ '${{' }} env.IMAGE_NAME }}/${{ '${{' }} env.IMAGE_NAME }}:latest
           
           echo "✅ Build and push completed successfully"
 
