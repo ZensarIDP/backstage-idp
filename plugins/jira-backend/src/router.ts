@@ -97,15 +97,31 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       
       const updateRequest: UpdateIssueRequest = request.body;
       
+      logger.info(`Updating issue ${issueKey} with data: ${JSON.stringify(updateRequest)}`);
+      
       const issue = await jiraService.updateIssue(issueKey, updateRequest);
       response.json(issue);
     } catch (error) {
-      logger.error(`Error updating issue: ${error}`, { issueKey: request.params.issueKey });
+      logger.error(`Error updating issue ${request.params.issueKey}: ${error}`);
       if (error instanceof InputError) {
         response.status(400).json({ error: error.message });
       } else {
-        response.status(500).json({ error: 'Failed to update issue' });
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logger.error(`Detailed error - Message: ${errorMessage}, Stack: ${error instanceof Error ? error.stack : 'No stack trace'}, IssueKey: ${request.params.issueKey}, RequestBody: ${JSON.stringify(request.body)}`);
+        response.status(500).json({ error: `Failed to update issue: ${errorMessage}` });
       }
+    }
+  });
+
+  // Get available transitions for an issue
+  router.get('/issues/:issueKey/transitions', async (request, response) => {
+    try {
+      const { issueKey } = request.params;
+      const transitions = await jiraService.getAvailableTransitions(issueKey);
+      response.json(transitions);
+    } catch (error) {
+      logger.error(`Error fetching transitions: ${error}`, { issueKey: request.params.issueKey });
+      response.status(500).json({ error: 'Failed to fetch transitions' });
     }
   });
 

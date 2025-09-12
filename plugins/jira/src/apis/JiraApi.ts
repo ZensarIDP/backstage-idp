@@ -50,6 +50,19 @@ export interface JiraIssueType {
   subtask: boolean;
 }
 
+export interface JiraTransition {
+  id: string;
+  name: string;
+  to: {
+    id: string;
+    name: string;
+    statusCategory: {
+      key: string;
+      name: string;
+    };
+  };
+}
+
 export interface CreateIssueRequest {
   projectKey: string;
   summary: string;
@@ -61,7 +74,7 @@ export interface CreateIssueRequest {
 
 export interface UpdateIssueRequest {
   summary?: string;
-  description?: string;
+  description?: string | any;
   assignee?: string;
   priority?: string;
   status?: string;
@@ -74,6 +87,7 @@ export interface JiraApi {
   createIssue(request: CreateIssueRequest): Promise<JiraIssue>;
   updateIssue(issueKey: string, request: UpdateIssueRequest): Promise<JiraIssue>;
   getIssueTypes(projectKey: string): Promise<JiraIssueType[]>;
+  getAvailableTransitions(issueKey: string): Promise<JiraTransition[]>;
   addComment(issueKey: string, comment: string): Promise<void>;
 }
 
@@ -175,6 +189,15 @@ export class JiraApiClient implements JiraApi {
     const response = await this.fetchApi.fetch(`${baseUrl}/projects/${projectKey}/issue-types`);
     if (!response.ok) {
       throw new Error(`Failed to fetch issue types: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  async getAvailableTransitions(issueKey: string): Promise<JiraTransition[]> {
+    const baseUrl = await this.getBaseUrl();
+    const response = await this.fetchApi.fetch(`${baseUrl}/issues/${issueKey}/transitions`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch transitions: ${response.statusText}`);
     }
     return response.json();
   }

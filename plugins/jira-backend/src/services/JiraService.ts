@@ -49,6 +49,19 @@ export interface JiraIssueType {
   subtask: boolean;
 }
 
+export interface JiraTransition {
+  id: string;
+  name: string;
+  to: {
+    id: string;
+    name: string;
+    statusCategory: {
+      key: string;
+      name: string;
+    };
+  };
+}
+
 export interface CreateIssueRequest {
   projectKey: string;
   summary: string;
@@ -60,7 +73,7 @@ export interface CreateIssueRequest {
 
 export interface UpdateIssueRequest {
   summary?: string;
-  description?: string;
+  description?: string | any; // Can be string or ADF object
   assignee?: string;
   priority?: string;
   status?: string;
@@ -272,6 +285,8 @@ export class JiraService {
 
   async updateIssue(issueKey: string, request: UpdateIssueRequest): Promise<JiraIssue> {
     try {
+      this.logger.info(`Backend received update request for ${issueKey}: ${JSON.stringify(request, null, 2)}`);
+      
       const updateData: any = {
         fields: {},
       };
@@ -280,22 +295,34 @@ export class JiraService {
         updateData.fields.summary = request.summary;
       }
       
-      if (request.description) {
-        updateData.fields.description = {
-          type: 'doc',
-          version: 1,
-          content: [
-            {
-              type: 'paragraph',
-              content: [
-                {
-                  type: 'text',
-                  text: request.description,
-                },
-              ],
-            },
-          ],
-        };
+      // Only include description if it's not empty and has actual content
+      if (request.description !== undefined && request.description !== null) {
+        // Check if description is already an object (ADF format) or a string
+        if (typeof request.description === 'object') {
+          // If it's already an ADF object, validate it has content
+          if (request.description.content && Array.isArray(request.description.content) && request.description.content.length > 0) {
+            updateData.fields.description = request.description;
+          }
+          // If empty ADF object, don't include description field at all
+        } else if (typeof request.description === 'string' && request.description.trim() !== '') {
+          // Handle non-empty string description
+          updateData.fields.description = {
+            type: 'doc',
+            version: 1,
+            content: [
+              {
+                type: 'paragraph',
+                content: [
+                  {
+                    type: 'text',
+                    text: request.description.trim(),
+                  },
+                ],
+              },
+            ],
+          };
+        }
+        // For empty strings or other invalid values, don't include description field
       }
 
       if (request.assignee) {
@@ -320,7 +347,7 @@ export class JiraService {
       });
 
       // Handle status transition separately if provided
-      if (request.status) {
+      if (request.status && request.status.trim() !== '') {
         await this.transitionIssue(issueKey, request.status);
       }
 
@@ -334,12 +361,19 @@ export class JiraService {
 
   async transitionIssue(issueKey: string, status: string): Promise<void> {
     try {
+      this.logger.info(`Attempting to transition issue ${issueKey} to status '${status}'`);
+      
       // Get available transitions
       const transitions = await this.makeRequest(`/issue/${issueKey}/transitions`);
       
+      this.logger.info(`Available transitions for ${issueKey}:`, { 
+        transitions: transitions.transitions.map((t: any) => ({ id: t.id, name: t.name, to: t.to.name }))
+      });
+      
       const transition = transitions.transitions.find((t: any) => t.to.name === status);
       if (!transition) {
-        throw new InputError(`Status '${status}' is not available for issue ${issueKey}`);
+        const availableStatuses = transitions.transitions.map((t: any) => t.to.name).join(', ');
+        throw new InputError(`Status '${status}' is not available for issue ${issueKey}. Available statuses: ${availableStatuses}`);
       }
 
       await this.makeRequest(`/issue/${issueKey}/transitions`, {
@@ -350,6 +384,24 @@ export class JiraService {
       });
     } catch (error) {
       this.logger.error(`Error transitioning issue: ${error}`, { issueKey, status });
+      throw error;
+    }
+  }
+
+  async getAvailableTransitions(issueKey: string): Promise<JiraTransition[]> {
+    try {
+      const response = await this.makeRequest(`/issue/${issueKey}/transitions`);
+      return response.transitions.map((transition: any) => ({
+        id: transition.id,
+        name: transition.name,
+        to: {
+          id: transition.to.id,
+          name: transition.to.name,
+          statusCategory: transition.to.statusCategory,
+        },
+      }));
+    } catch (error) {
+      this.logger.error(`Error fetching available transitions: ${error}`, { issueKey });
       throw error;
     }
   }

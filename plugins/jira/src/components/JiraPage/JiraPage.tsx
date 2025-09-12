@@ -46,6 +46,7 @@ import {
   JiraIssue, 
   JiraProject, 
   JiraIssueType, 
+  JiraTransition,
   CreateIssueRequest, 
   UpdateIssueRequest,
   type JiraApi 
@@ -84,6 +85,7 @@ export const JiraPage = () => {
   const [issues, setIssues] = useState<JiraIssue[]>([]);
   const [projects, setProjects] = useState<JiraProject[]>([]);
   const [issueTypes, setIssueTypes] = useState<JiraIssueType[]>([]);
+  const [availableTransitions, setAvailableTransitions] = useState<JiraTransition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -103,6 +105,7 @@ export const JiraPage = () => {
     issueType: '',
     priority: '',
     assignee: '',
+    status: '',
   });
   
   // Comment Dialog
@@ -161,6 +164,7 @@ export const JiraPage = () => {
         issueType: '',
         priority: '',
         assignee: '',
+        status: '',
       });
       loadData();
     } catch (err) {
@@ -177,6 +181,7 @@ export const JiraPage = () => {
         description: issueForm.description || undefined,
         assignee: issueForm.assignee || undefined,
         priority: issueForm.priority || undefined,
+        ...(issueForm.status && issueForm.status !== '' && { status: issueForm.status }),
       };
       
       await jiraApi.updateIssue(selectedIssue.key, request);
@@ -189,11 +194,30 @@ export const JiraPage = () => {
         assignee: '',
         priority: '',
         projectKey: '',
+        status: '',
       });
+      setAvailableTransitions([]);
       loadData();
     } catch (err) {
       console.error('Error updating issue:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to update issue';
+      
+      // Try to extract more detailed error information
+      let errorMessage = 'Failed to update issue';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        // If it's a network error, try to get more details
+        if (err.message === 'Failed to update issue' && (err as any).cause) {
+          errorMessage += `: ${(err as any).cause}`;
+        }
+      }
+      
+      console.error('Full error details:', {
+        message: errorMessage,
+        error: err,
+        selectedIssue: selectedIssue?.key,
+        formData: issueForm
+      });
+      
       setError(errorMessage);
       // Don't close the dialog so user can try again with correct values
     }
@@ -212,7 +236,7 @@ export const JiraPage = () => {
     }
   };
 
-  const openEditDialog = (issue: JiraIssue) => {
+  const openEditDialog = async (issue: JiraIssue) => {
     setSelectedIssue(issue);
     setIssueForm({
       projectKey: issue.project.key,
@@ -221,7 +245,18 @@ export const JiraPage = () => {
       issueType: issue.issuetype?.name || 'Task',
       priority: issue.priority?.name || 'Medium',
       assignee: issue.assignee?.emailAddress || '',
+      status: '', // Always start with "Keep Current Status"
     });
+    
+    // Load available transitions for this issue
+    try {
+      const transitions = await jiraApi.getAvailableTransitions(issue.key);
+      setAvailableTransitions(transitions);
+    } catch (err) {
+      console.error('Error loading transitions:', err);
+      setAvailableTransitions([]);
+    }
+    
     setEditDialogOpen(true);
   };
 
@@ -238,6 +273,7 @@ export const JiraPage = () => {
       issueType: '',
       priority: '',
       assignee: '',
+      status: '',
     });
     if (selectedProject) {
       loadIssueTypes(selectedProject);
@@ -565,6 +601,24 @@ export const JiraPage = () => {
                   value={issueForm.assignee}
                   onChange={(e) => setIssueForm({ ...issueForm, assignee: e.target.value })}
                 />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth margin="normal">
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    value={issueForm.status}
+                    onChange={(e) => setIssueForm({ ...issueForm, status: e.target.value as string })}
+                  >
+                    <MenuItem value="">
+                      Keep Current Status ({selectedIssue?.status?.name || 'Unknown'})
+                    </MenuItem>
+                    {availableTransitions.map((transition) => (
+                      <MenuItem key={transition.id} value={transition.to.name}>
+                        {transition.to.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
             </Grid>
           </DialogContent>
